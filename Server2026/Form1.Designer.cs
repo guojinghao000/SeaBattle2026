@@ -174,6 +174,7 @@
             MainMenuStrip = menuStrip1;
             Name = "Form1";
             Text = "大海战 服务端 0.0.1";
+            FormClosing += Form1_FormClosing;
             groupBox1.ResumeLayout(false);
             groupBox2.ResumeLayout(false);
             groupBox3.ResumeLayout(false);

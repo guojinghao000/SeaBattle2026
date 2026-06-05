@@ -8,4 +8,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Folder Include="Net\" />
+    <Folder Include="Game\" />
+  </ItemGroup>
+
 </Project>

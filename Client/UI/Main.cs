@@ -115,6 +115,7 @@ public partial class Main : Form
         _moveDy = 0;
 
         gbLogin.Enabled = true;
+        btnConnect.Enabled =true;
         btnDisconnect.Enabled = false;
         lblStatus.Text = "未连接";
         lblShipStatus.Text = "";

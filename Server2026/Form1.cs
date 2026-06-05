@@ -48,7 +48,7 @@ namespace Server2026
             List<Ship> snapshot;
             lock (_shipLock) { snapshot = shipList.ToList(); }
 
-            if (snapshot.Count == 0) return;
+            if (snapshot.Count == 0) { pictureBox1.Invalidate(); return; }
 
             foreach (var ship in snapshot)
             {
@@ -172,11 +172,11 @@ namespace Server2026
                     if (ship.Client != null && ship.Client.Connected == true)
                     {
                         AddMessage($"与 {ship.Client.Client.RemoteEndPoint} 失去联系，停止接收该用户信息");
-                        // 发送格式：Lost,船位号,用户名
-                        // Service.SendToOne(user1, $"Lost,{j},{user1}");
                     }
+                    ship.moveTimer.Stop();
+                    ship.fireTimer.Stop();
                     RemoveShip(ship);
-                    break;  // 退出循环
+                    break;
                 }
                 // 频率较高的信息可以不显示在服务器界面上，这里只显示关键信息
                 // AddMessage($"-----来自 {ship.shipName}：{receiveString}");
@@ -194,7 +194,7 @@ namespace Server2026
                             break;
                         case "logout":  // 用户退出游戏(格式：Logout)
                             AddMessage($"{ship.shipName} 退出游戏");
-                            exitWhile = true;   // 停止接收该客户端信息
+                            exitWhile = true;
                             break;
                         case "move":  // Move,x,y(x,y取值范围[-1,1])
                             if (ship.allowMove)
@@ -231,10 +231,16 @@ namespace Server2026
                     AddMessage($"解析异常 {ship.shipName}:{receiveString}");
                 }
             }
+            ship.moveTimer.Stop();
+            ship.fireTimer.Stop();
+            ship.SWriter?.Close();
+            ship.SReader?.Close();
             ship.Client?.Close();
             RemoveShip(ship);
-            // AddMessage($"又一个用户退出，剩余在线用户数：{shipList.Count}");
-            SendToAll(shipList, GetAllShipName());
+            pictureBox1.Invalidate();
+            List<Ship> remaining;
+            lock (_shipLock) { remaining = shipList.ToList(); }
+            SendToAll(remaining, GetAllShipName());
         }
 
         public string GetAllShipName()

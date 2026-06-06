@@ -22,6 +22,7 @@ namespace Server2026
         public int score;
         public bool allowMove = false;
         public bool allowFire = false;
+        public bool IsBot { get; set; }
 
         public TcpClient? Client { get; private set; }
         public StreamReader? SReader { get; private set; }

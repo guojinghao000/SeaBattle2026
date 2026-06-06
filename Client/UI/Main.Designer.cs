@@ -36,7 +36,7 @@
             // 
             // pbBattlefield
             // 
-            pbBattlefield.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left;
+            pbBattlefield.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             pbBattlefield.BackColor = Color.FromArgb(16, 40, 72);
             pbBattlefield.Location = new Point(12, 12);
             pbBattlefield.Name = "pbBattlefield";

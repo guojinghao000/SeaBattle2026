@@ -20,6 +20,9 @@ public partial class Main : Form
     private static readonly Color GridColor = Color.FromArgb(30, 60, 100);
     private static readonly Color SelfColor = Color.LimeGreen;
     private static readonly Color EnemyColor = Color.OrangeRed;
+    private static readonly Color RangeColor = Color.FromArgb(30, Color.White);
+    private static readonly Color InRangeBorder = Color.Orange;
+    private float _offsetX, _offsetY;
 
     public Main()
     {
@@ -42,7 +45,6 @@ public partial class Main : Form
             return;
         }
 
-        // Disconnect first if already connected
         if (_net != null)
             await Disconnect();
 
@@ -115,7 +117,7 @@ public partial class Main : Form
         _moveDy = 0;
 
         gbLogin.Enabled = true;
-        btnConnect.Enabled =true;
+        btnConnect.Enabled = true;
         btnDisconnect.Enabled = false;
         lblStatus.Text = "未连接";
         lblShipStatus.Text = "";
@@ -197,7 +199,7 @@ public partial class Main : Form
             case Keys.S or Keys.Down: _moveDx = 0; _moveDy = 1; break;
             case Keys.A or Keys.Left: _moveDx = -1; _moveDy = 0; break;
             case Keys.D or Keys.Right: _moveDx = 1; _moveDy = 0; break;
-            case Keys.Space or Keys.F: TryFireInDirection(); break;
+            case Keys.Space or Keys.F: TryFireAtNearestTarget(); break;
         }
     }
 
@@ -214,33 +216,41 @@ public partial class Main : Form
         }
     }
 
-    private async void TryFireInDirection()
+    private Fleet? GetNearestTargetInRange()
     {
-        if (_net == null || !_canFire) return;
+        if (_state?.LocalShip == null) return null;
 
-        int dx = _moveDx, dy = _moveDy;
-        if (dx == 0 && dy == 0) dx = 1; // default fire right if stationary
+        Fleet? nearest = null;
+        int minDistSq = int.MaxValue;
+        int rangeSq = 5 * 5;
 
-        // Scale to max range 5
-        dx *= 5;
-        dy *= 5;
+        foreach (var ship in _state.AllShips)
+        {
+            if (ship == _state.LocalShip) continue;
 
-        _canFire = false;
-        await _net.SendCommandAsync($"Fire,{dx},{dy}");
-        _fireTimer.Start();
+            int dx = ship.Px - _state.LocalShip.Px;
+            int dy = ship.Py - _state.LocalShip.Py;
+            int distSq = dx * dx + dy * dy;
+
+            if (distSq <= rangeSq && distSq < minDistSq)
+            {
+                minDistSq = distSq;
+                nearest = ship;
+            }
+        }
+
+        return nearest;
     }
 
-    private void PbBattlefield_MouseDown(object? sender, MouseEventArgs e)
+    private async void TryFireAtNearestTarget()
     {
         if (_net == null || !_canFire || _state?.LocalShip == null) return;
 
-        float cellSize = GetCellSize();
-        int mapX = (int)(e.X / cellSize);
-        int mapY = (int)(e.Y / cellSize);
+        var target = GetNearestTargetInRange();
+        if (target == null) return;
 
-        // Calculate relative offset from ship
-        int dx = mapX - _state.LocalShip.Px;
-        int dy = mapY - _state.LocalShip.Py;
+        int dx = target.Px - _state.LocalShip.Px;
+        int dy = target.Py - _state.LocalShip.Py;
 
         // Clamp to range [-5,5] within circle radius 5
         if (dx * dx + dy * dy > 25)
@@ -252,8 +262,12 @@ public partial class Main : Form
         }
 
         _canFire = false;
-        _ = _net.SendCommandAsync($"Fire,{dx},{dy}");
+        await _net.SendCommandAsync($"Fire,{dx},{dy}");
         _fireTimer.Start();
+    }
+
+    private void PbBattlefield_MouseDown(object? sender, MouseEventArgs e)
+    {
     }
 
     private void PbBattlefield_Paint(object? sender, PaintEventArgs e)
@@ -264,45 +278,73 @@ public partial class Main : Form
         float cellSize = GetCellSize();
         int gridSize = 100;
 
-        // Background
         g.Clear(BgColor);
 
-        // Grid
         using var gridPen = new Pen(GridColor, 1);
         for (int i = 0; i <= gridSize; i++)
         {
-            float x = i * cellSize;
-            g.DrawLine(gridPen, x, 0, x, gridSize * cellSize);
-            g.DrawLine(gridPen, 0, x, gridSize * cellSize, x);
+            float p = i * cellSize;
+            g.DrawLine(gridPen, _offsetX + p, _offsetY, _offsetX + p, _offsetY + gridSize * cellSize);
+            g.DrawLine(gridPen, _offsetX, _offsetY + p, _offsetX + gridSize * cellSize, _offsetY + p);
         }
 
         if (_state == null) return;
 
-        // Draw fire markers
+        if (_state.LocalShip != null)
+        {
+            float cx = _offsetX + _state.LocalShip.Px * cellSize;
+            float cy = _offsetY + _state.LocalShip.Py * cellSize;
+            float rangePx = 5 * cellSize;
+            using var rangePen = new Pen(Color.FromArgb(60, 255, 255, 255), 1) { DashStyle = DashStyle.Dash };
+            g.DrawEllipse(rangePen, cx - rangePx, cy - rangePx, rangePx * 2, rangePx * 2);
+        }
+
         foreach (var ship in _state.AllShips)
         {
             if (ship.Fx >= 0 && ship.Fy >= 0)
             {
-                float fx = ship.Fx * cellSize;
-                float fy = ship.Fy * cellSize;
+                float fx = _offsetX + ship.Fx * cellSize;
+                float fy = _offsetY + ship.Fy * cellSize;
                 g.FillEllipse(Brushes.Yellow, fx - 4, fy - 4, 8, 8);
             }
         }
 
-        // Draw ships
+        // Determine which enemies are in range
+        var inRangeTarget = GetNearestTargetInRange();
+        var allInRange = new HashSet<Fleet>();
+        if (_state.LocalShip != null)
+        {
+            int rangeSq = 5 * 5;
+            foreach (var ship in _state.AllShips)
+            {
+                if (ship == _state.LocalShip) continue;
+                int dx = ship.Px - _state.LocalShip.Px;
+                int dy = ship.Py - _state.LocalShip.Py;
+                if (dx * dx + dy * dy <= rangeSq)
+                    allInRange.Add(ship);
+            }
+        }
+
         foreach (var ship in _state.AllShips)
         {
             bool isLocal = ship == _state.LocalShip;
-            float sx = ship.Px * cellSize;
-            float sy = ship.Py * cellSize;
+            bool inRange = allInRange.Contains(ship);
+            float sx = _offsetX + ship.Px * cellSize;
+            float sy = _offsetY + ship.Py * cellSize;
             float r = isLocal ? 10 : 8;
 
-            // Ship circle
+            if (inRange)
+            {
+                r = 10;
+                using var glowBrush = new SolidBrush(Color.FromArgb(60, InRangeBorder));
+                g.FillEllipse(glowBrush, sx - 14, sy - 14, 28, 28);
+            }
+
             using var brush = new SolidBrush(isLocal ? SelfColor : EnemyColor);
             g.FillEllipse(brush, sx - r, sy - r, r * 2, r * 2);
 
-            // Border
-            using var borderPen = new Pen(isLocal ? Color.White : Color.FromArgb(180, 180, 180), 2);
+            using var borderPen = new Pen(
+                inRange ? InRangeBorder : isLocal ? Color.White : Color.FromArgb(180, 180, 180), inRange ? 3 : 2);
             g.DrawEllipse(borderPen, sx - r, sy - r, r * 2, r * 2);
 
             // HP bar
@@ -327,6 +369,10 @@ public partial class Main : Form
 
     private float GetCellSize()
     {
-        return Math.Min(pbBattlefield.Width, pbBattlefield.Height) / 100f;
+        float cs = Math.Min(pbBattlefield.Width, pbBattlefield.Height) / 100f;
+        float gridPx = 100 * cs;
+        _offsetX = (pbBattlefield.Width - gridPx) / 2f;
+        _offsetY = (pbBattlefield.Height - gridPx) / 2f;
+        return cs;
     }
 }

@@ -17,6 +17,9 @@ namespace Server2026
         private readonly Bitmap shipBitmap = Resource1.ship;
         private readonly Bitmap fireBitmap = Resource1.fire;
 
+        private const int MinBotCount = 5;
+        private int _botCycle;
+
         public Form1()
         {
             InitializeComponent();
@@ -68,6 +71,72 @@ namespace Server2026
             str.TrimEnd(',');
             SendToAll(snapshot, str);
             pictureBox1.Invalidate();
+
+            RefillBots();
+        }
+
+        private void SpawnBots()
+        {
+            bool added = false;
+            lock (_shipLock)
+            {
+                for (int i = 0; i < MinBotCount; i++)
+                {
+                    var bot = new Ship(null)
+                    {
+                        shipName = $"靶船-{(char)('A' + i)}",
+                        captainName = "AI",
+                        crewNames = "AI",
+                        IsBot = true
+                    };
+                    bot.moveTimer.Stop();
+                    bot.fireTimer.Stop();
+                    shipList.Add(bot);
+                    added = true;
+                }
+            }
+            if (added)
+            {
+                List<Ship> snapshot;
+                lock (_shipLock) { snapshot = shipList.ToList(); }
+                SendToAll(snapshot, GetAllShipName());
+                AddMessage($"已生成 {MinBotCount} 个机器人靶船");
+            }
+        }
+
+        private void RefillBots()
+        {
+            bool added = false;
+            lock (_shipLock)
+            {
+                int botCount = shipList.Count(s => s.IsBot);
+                if (botCount < MinBotCount)
+                {
+                    int toAdd = MinBotCount - botCount;
+                    for (int i = 0; i < toAdd; i++)
+                    {
+                        var bot = new Ship(null)
+                        {
+                            shipName = $"靶船-{(char)('Z' - _botCycle % 26)}",
+                            captainName = "AI",
+                            crewNames = "AI",
+                            IsBot = true
+                        };
+                        _botCycle++;
+                        bot.moveTimer.Stop();
+                        bot.fireTimer.Stop();
+                        shipList.Add(bot);
+                    }
+                    added = true;
+                }
+            }
+            if (added)
+            {
+                List<Ship> snapshot;
+                lock (_shipLock) { snapshot = shipList.ToList(); }
+                SendToAll(snapshot, GetAllShipName());
+                AddMessage("已补充机器人靶船");
+            }
         }
 
         public void CheckShipHit(List<Ship> shipList, Ship attacker)
@@ -77,11 +146,9 @@ namespace Server2026
 
             foreach (var targetShip in shipList)
             {
-                // 跳过自身，不能攻击自己
                 if (targetShip.shipID == attacker.shipID)
                     continue;
 
-                // 判断是否命中：目标船只位置等于攻击坐标(fx/fy)
                 if (targetShip.px == attacker.fx && targetShip.py == attacker.fy)
                 {
                     AddMessage($"命中 {targetShip.shipID}，当前HP: {targetShip.hp}");
@@ -94,8 +161,13 @@ namespace Server2026
                         targetShip.ReSet();
 
                         attacker.score++;
-                        attacker.hp = 3; // 恢复攻击者HP（评分要求）
+                        attacker.hp = 3;
                         AddMessage($"攻击者 {attacker.shipID} 得分+1，当前得分: {attacker.score}");
+
+                        // Bots respawn automatically via ReSet();
+                        // RefillBots() in UpdateTimer_Elapsed ensures minimum count.
+                        // Bots killed count toward the bot total, so if a bot is gone,
+                        // RefillBots will add a new one next cycle.
                     }
                 }
             }
@@ -115,6 +187,8 @@ namespace Server2026
                 this.Text = $"大海战 服务端 0.0.1 - {serverIP}:{tcpPort}";
                 Thread listenThread = new(ListenClientConnect);
                 listenThread.Start();
+
+                SpawnBots();
             }
             else
             {
@@ -130,7 +204,7 @@ namespace Server2026
                 TcpClient newClient = new();
                 try
                 {
-                    newClient = tcpListener.AcceptTcpClient();  // 等待用户连接
+                    newClient = tcpListener.AcceptTcpClient();
                 }
                 catch (Exception ex)
                 {
@@ -148,12 +222,11 @@ namespace Server2026
             }
         }
 
-        // 每个客户端对应一个ReceiveData线程，用于接收该客户端发送的信息并处理
         public void ReceiveData(object? obj)
         {
             if (obj == null) return;
             Ship ship = (Ship)obj;
-            bool exitWhile = false;   // 用于控制是否退出循环
+            bool exitWhile = false;
             while (exitWhile == false)
             {
                 string? receiveString = null;
@@ -163,7 +236,6 @@ namespace Server2026
                 }
                 catch (Exception ex)
                 {
-                    // 该客户端网络连接断开时触发异常
                     AddMessage($"接收数据失败：{ex.Message}");
                     RemoveShip(ship);
                 }
@@ -178,25 +250,23 @@ namespace Server2026
                     RemoveShip(ship);
                     break;
                 }
-                // 频率较高的信息可以不显示在服务器界面上，这里只显示关键信息
-                // AddMessage($"-----来自 {ship.shipName}：{receiveString}");
                 try
                 {
                     string[] splitString = receiveString.Split(',');
                     string command = splitString[0].ToLower();
                     switch (command)
                     {
-                        case "login":  // 用户刚刚登录(格式：Login,shipName,CaptainName,crewNames)
+                        case "login":
                             ship.shipName = splitString[1];
                             ship.captainName = splitString[2];
                             ship.crewNames = splitString[3];
                             SendToAll(shipList, GetAllShipName());
                             break;
-                        case "logout":  // 用户退出游戏(格式：Logout)
+                        case "logout":
                             AddMessage($"{ship.shipName} 退出游戏");
                             exitWhile = true;
                             break;
-                        case "move":  // Move,x,y(x,y取值范围[-1,1])
+                        case "move":
                             if (ship.allowMove)
                             {
                                 int x = int.Parse(splitString[1]);
@@ -210,14 +280,14 @@ namespace Server2026
                                 ship.allowMove = false;
                             }
                             break;
-                        case "fire":  // Fire,x,y(x,y取值范围[-5,5]，需满足x2+y2≤25)
+                        case "fire":
                             if (ship.allowFire)
                             {
-                                int x = int.Parse(splitString[1]);
-                                int y = int.Parse(splitString[2]);
-                                var result = ClampToCircle(x, y);
-                                ship.fx = result.limitedX;
-                                ship.fy = result.limitedY;
+                                int dx = int.Parse(splitString[1]);
+                                int dy = int.Parse(splitString[2]);
+                                var result = ClampToCircle(dx, dy);
+                                ship.fx = ship.px + result.limitedX;
+                                ship.fy = ship.py + result.limitedY;
                                 ship.allowFire = false;
                             }
                             break;
@@ -327,7 +397,6 @@ namespace Server2026
             {
                 ship.SWriter.WriteLine(message);
                 ship.SWriter.Flush();
-                // AddMessage($"向{ship.shipName}发送{message}");
             }
             catch (Exception ex)
             {
@@ -357,7 +426,6 @@ namespace Server2026
                 }
                 catch
                 {
-                    // do nothing
                 }
             }
             else
@@ -372,22 +440,15 @@ namespace Server2026
         {
             const float radius = 5f;
 
-            // 计算点到圆心(0,0)的距离平方
             float squaredDistance = x * x + y * y;
 
-            // 如果在圆内或圆上，直接返回原始值
             if (squaredDistance <= radius * radius)
             {
                 return (x, y);
             }
 
-            // 计算实际距离
             float distance = (float)Math.Sqrt(squaredDistance);
-
-            // 计算缩放比例，映射到圆边缘
             float scale = radius / distance;
-
-            // 计算限制后坐标
             int limitedX = (int)(x * scale);
             int limitedY = (int)(y * scale);
 

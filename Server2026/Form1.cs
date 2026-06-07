@@ -64,7 +64,7 @@ namespace Server2026
             string str = "Data,";
             foreach (var ship in snapshot)
             {
-                str += $"{ship.shipID},{ship.px},{ship.py},{ship.fx},{ship.fy},{ship.hp},{ship.score},";
+                str += $"{ship.shipID},{ship.px},{ship.py},{ship.fx},{ship.fy},{ship.hp},{ship.score},{ship.FireCooldownMs},";
                 ship.fx = -1;
                 ship.fy = -1;
             }
@@ -290,6 +290,9 @@ namespace Server2026
                                 ship.fx = ship.px + result.limitedX;
                                 ship.fy = ship.py + result.limitedY;
                                 ship.allowFire = false;
+                                ship.LastFireTime = DateTime.Now;
+                                ship.fireTimer.Stop();
+                                ship.fireTimer.Start();
                             }
                             break;
                         default:

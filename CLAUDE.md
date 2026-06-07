@@ -32,9 +32,8 @@ No test project exists in this solution.
 | **Game** | `Client/Game/Fleet.cs` | Plain data model: ShipID, ShipName, CaptainName, CrewNames, Px, Py, Fx, Fy, HP, Score. |
 | **UI** | `Client/UI/Main.cs` | Login panel, battlefield rendering (100×100 grid with ships as colored dots, HP bars, range circles), keyboard input (WASD/arrows move, Space/F auto-fire), leaderboard, 3-timer game loop. |
 
-### Client game loop (3 timers)
+### Client game loop (2 timers)
 
-- **100ms** (`_gameTimer`): dequeues messages from `NetworkService.ReceivedMessages`, calls `TryFireAtNearestTarget()`, invalidates battlefield PictureBox, updates ship status label
 - **1000ms** (`_moveTimer`): sends `Move` if direction keys held
 - **2000ms** (`_fireTimer`): re-enables fire cooldown
 
@@ -82,6 +81,9 @@ The README documents several critical server fixes applied during development:
 - `ReceiveData` cleans up timers, reader/writer, and client on disconnect
 - `FormClosing` calls `Environment.Exit(0)` to prevent lingering processes
 - Chinese text encoding was corrupted and has been repaired
+
+## 新增功能
+- 由于舰船之间的射程一样，目前需要设计自主开火功能，否则几乎都是同归于尽的下场，其次为了更加有竞技性，需要使敌我双方看到开火cd，其余要求请转至`要求.md`
 
 ## 要求（非常重要）
 - Server2026_ori文件夹是服务端源文件请勿修改，对于Server2026文件夹中的代码修改要严格参考服务端源文件和`TCP&UDP海战大联机-开发文档 .docx`逻辑功能且需要做尽可能少的修改完成任务

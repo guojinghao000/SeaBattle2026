@@ -29,7 +29,6 @@
             lblStatus = new Label();
             btnDisconnect = new Button();
             lblShipStatus = new Label();
-            ((System.ComponentModel.ISupportInitialize)pbBattlefield).BeginInit();
             gbLogin.SuspendLayout();
             gbScore.SuspendLayout();
             SuspendLayout();
@@ -43,7 +42,7 @@
             pbBattlefield.Size = new Size(600, 588);
             pbBattlefield.TabIndex = 0;
             pbBattlefield.TabStop = false;
-            pbBattlefield.Paint += PbBattlefield_Paint;
+            pbBattlefield.SizeMode = PictureBoxSizeMode.Normal;
             // 
             // gbLogin
             // 
@@ -216,7 +215,6 @@
             FormClosing += Main_FormClosing;
             KeyDown += Main_KeyDown;
             KeyUp += Main_KeyUp;
-            ((System.ComponentModel.ISupportInitialize)pbBattlefield).EndInit();
             gbLogin.ResumeLayout(false);
             gbLogin.PerformLayout();
             gbScore.ResumeLayout(false);

@@ -23,6 +23,16 @@ namespace Server2026
         public bool allowMove = false;
         public bool allowFire = false;
         public bool IsBot { get; set; }
+        public DateTime LastFireTime { get; set; } = DateTime.MinValue;
+        public int FireCooldownMs
+        {
+            get
+            {
+                if (LastFireTime == DateTime.MinValue) return 0;
+                int elapsed = (int)(DateTime.Now - LastFireTime).TotalMilliseconds;
+                return Math.Max(0, 2000 - elapsed);
+            }
+        }
 
         public TcpClient? Client { get; private set; }
         public StreamReader? SReader { get; private set; }

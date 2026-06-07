@@ -12,4 +12,5 @@ public class Fleet
     public int Fy { get; set; }
     public int HP { get; set; }
     public int Score { get; set; }
+    public int FireCooldownMs { get; set; }
 }

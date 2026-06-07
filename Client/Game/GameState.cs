@@ -85,10 +85,10 @@ public class GameState
     private void ProcessData(string message)
     {
         var parts = message.Split(',', StringSplitOptions.RemoveEmptyEntries);
-        // Data,shipID,px,py,fx,fy,HP,score,...
-        // Groups of 7
+        // Data,shipID,px,py,fx,fy,HP,score,fireCooldownMs,...
+        // Groups of 8
 
-        for (int i = 1; i + 6 < parts.Length; i += 7)
+        for (int i = 1; i + 7 < parts.Length; i += 8)
         {
             string id = parts[i];
 
@@ -104,6 +104,7 @@ public class GameState
             if (int.TryParse(parts[i + 4], out int fy)) ship.Fy = fy;
             if (int.TryParse(parts[i + 5], out int hp)) ship.HP = hp;
             if (int.TryParse(parts[i + 6], out int score)) ship.Score = score;
+            if (int.TryParse(parts[i + 7], out int cd)) ship.FireCooldownMs = cd;
         }
 
         StateChanged?.Invoke();

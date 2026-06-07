@@ -22,7 +22,6 @@ namespace Server2026
         public int score;
         public bool allowMove = false;
         public bool allowFire = false;
-        public bool IsBot { get; set; }
 
         public TcpClient? Client { get; private set; }
         public StreamReader? SReader { get; private set; }
@@ -33,7 +32,7 @@ namespace Server2026
 
         public Ship(TcpClient? client)//(string shipName, string captainName, string crewNames, TcpClient? client)
         {
-            shipID = string.Format("{0,5:D3}", Interlocked.Increment(ref count) - 1);
+            shipID = string.Format("{0,5:D3}", count++);
             //this.shipName = shipName;
             //this.captainName = captainName;
             //this.crewNames = crewNames;
@@ -58,8 +57,8 @@ namespace Server2026
 
         public void ReSet()
         {
-            px = rand.Next(0, 101);
-            py = rand.Next(0, 101);
+            px = rand.Next(1, 100);
+            py = rand.Next(1, 100);
             hp = 3;
         }
     }

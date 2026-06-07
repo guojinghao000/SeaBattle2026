@@ -15,6 +15,7 @@ public partial class Main : Form
     private bool _canMove = true;
     private bool _canFire = true;
     private bool _loggedIn;
+    private readonly HashSet<Keys> _heldKeys = new();
 
     private static readonly Color BgColor = Color.FromArgb(16, 40, 72);
     private static readonly Color GridColor = Color.FromArgb(30, 60, 100);
@@ -93,9 +94,22 @@ public partial class Main : Form
         await Disconnect();
     }
 
-    private async void Main_FormClosing(object sender, FormClosingEventArgs e)
+    private void Main_FormClosing(object sender, FormClosingEventArgs e)
     {
-        await Disconnect();
+        if (_net != null && _loggedIn)
+        {
+            try
+            {
+                // 同步发送 Logout 确保服务器收到
+                _net.SendCommandAsync("Logout").Wait(TimeSpan.FromSeconds(1));
+            }
+            catch { }
+        }
+        _gameTimer.Stop();
+        _moveTimer.Stop();
+        _fireTimer.Stop();
+        _net?.Dispose();
+        _net = null;
     }
 
     private async Task Disconnect()
@@ -115,6 +129,7 @@ public partial class Main : Form
         _canFire = true;
         _moveDx = 0;
         _moveDy = 0;
+        _heldKeys.Clear();
 
         gbLogin.Enabled = true;
         btnConnect.Enabled = true;
@@ -194,26 +209,24 @@ public partial class Main : Form
 
     private void Main_KeyDown(object sender, KeyEventArgs e)
     {
-        switch (e.KeyCode)
-        {
-            case Keys.W or Keys.Up: _moveDx = 0; _moveDy = -1; break;
-            case Keys.S or Keys.Down: _moveDx = 0; _moveDy = 1; break;
-            case Keys.A or Keys.Left: _moveDx = -1; _moveDy = 0; break;
-            case Keys.D or Keys.Right: _moveDx = 1; _moveDy = 0; break;
-        }
+        _heldKeys.Add(e.KeyCode);
+        UpdateMoveDirection();
     }
 
     private void Main_KeyUp(object sender, KeyEventArgs e)
     {
-        switch (e.KeyCode)
-        {
-            case Keys.W or Keys.Up when _moveDy == -1:
-            case Keys.S or Keys.Down when _moveDy == 1:
-                _moveDy = 0; break;
-            case Keys.A or Keys.Left when _moveDx == -1:
-            case Keys.D or Keys.Right when _moveDx == 1:
-                _moveDx = 0; break;
-        }
+        _heldKeys.Remove(e.KeyCode);
+        UpdateMoveDirection();
+    }
+
+    private void UpdateMoveDirection()
+    {
+        _moveDx = 0;
+        _moveDy = 0;
+        if (_heldKeys.Contains(Keys.W) || _heldKeys.Contains(Keys.Up)) _moveDy = -1;
+        else if (_heldKeys.Contains(Keys.S) || _heldKeys.Contains(Keys.Down)) _moveDy = 1;
+        if (_heldKeys.Contains(Keys.A) || _heldKeys.Contains(Keys.Left)) _moveDx = -1;
+        else if (_heldKeys.Contains(Keys.D) || _heldKeys.Contains(Keys.Right)) _moveDx = 1;
     }
 
     private Fleet? GetNearestTargetInRange()

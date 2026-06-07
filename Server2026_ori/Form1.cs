@@ -1,5 +1,7 @@
 using System.Net.Sockets;
 using System.Net;
+using Microsoft.VisualBasic.ApplicationServices;
+using System.Xml;
 using System.Text;
 
 namespace Server2026
@@ -11,14 +13,10 @@ namespace Server2026
         public int udpPort = 18001;
         public TcpListener? tcpListener;
         bool isListening = false;
-        public List<Ship> shipList = new();  // åœ¨çº¿çš„ç”¨æˆ·
-        private readonly object _shipLock = new();
+        public List<Ship> shipList = new();  //Á¬½ÓµÄÓÃ»§
         public System.Timers.Timer updateTimer { get; set; } = new(500);
         private readonly Bitmap shipBitmap = Resource1.ship;
         private readonly Bitmap fireBitmap = Resource1.fire;
-
-        private const int MinBotCount = 5;
-        private int _botCycle;
 
         public Form1()
         {
@@ -29,142 +27,83 @@ namespace Server2026
             updateTimer.Start();
             pictureBox1.Paint += PictureBox1_Paint;
 
-            StartToolStripMenuItem_Click(this, EventArgs.Empty);
+            //²âÊÔ
+            //shipList.Add(new Ship(null) { px=50,py=50,fx=15,fy=20 });
+            //shipList.Add(new Ship(null) { px = 100, py = 100, fx = 15, fy = 20 });
         }
 
         private void PictureBox1_Paint(object? sender, PaintEventArgs e)
         {
             Graphics g = e.Graphics;
             int dd = Math.Min(pictureBox1.Size.Width, pictureBox1.Size.Height) / 100;
-            List<Ship> snapshot;
-            lock (_shipLock) { snapshot = shipList.ToList(); }
-            foreach (var ship in snapshot)
+            foreach (var ship in shipList)
             {
                 g.DrawImage(shipBitmap, ship.px * dd, ship.py * dd);
-                if (ship.fx > 0)
+                if(ship.fx>0)
                     g.DrawImage(fireBitmap, ship.fx * dd, ship.fy * dd);
             }
         }
 
         private void UpdateTimer_Elapsed(object? sender, System.Timers.ElapsedEventArgs e)
         {
-            List<Ship> snapshot;
-            lock (_shipLock) { snapshot = shipList.ToList(); }
-
-            if (snapshot.Count == 0) { pictureBox1.Invalidate(); return; }
-
-            foreach (var ship in snapshot)
+            if (shipList.Count > 0)
             {
-                if (ship.fx != -1)
+                foreach (var ship in shipList)
                 {
-                    CheckShipHit(snapshot, ship);
-                }
-            }
-
-            string str = "Data,";
-            foreach (var ship in snapshot)
-            {
-                str += $"{ship.shipID},{ship.px},{ship.py},{ship.fx},{ship.fy},{ship.hp},{ship.score},";
-                ship.fx = -1;
-                ship.fy = -1;
-            }
-            str = str.TrimEnd(',');
-            SendToAll(snapshot, str);
-            pictureBox1.Invalidate();
-
-            RefillBots();
-        }
-
-        private void SpawnBots()
-        {
-            bool added = false;
-            lock (_shipLock)
-            {
-                for (int i = 0; i < MinBotCount; i++)
-                {
-                    var bot = new Ship(null)
+                    if (ship.fx != -1)
                     {
-                        shipName = $"é¶èˆ¹-{(char)('A' + i)}",
-                        captainName = "AI",
-                        crewNames = "AI",
-                        IsBot = true
-                    };
-                    bot.moveTimer.Stop();
-                    bot.fireTimer.Stop();
-                    shipList.Add(bot);
-                    added = true;
-                }
-            }
-            if (added)
-            {
-                List<Ship> snapshot;
-                lock (_shipLock) { snapshot = shipList.ToList(); }
-                SendToAll(snapshot, GetAllShipName());
-                AddMessage($"å·²ç”Ÿæˆ {MinBotCount} ä¸ªæœºå™¨äººé¶èˆ¹");
-            }
-        }
-
-        private void RefillBots()
-        {
-            bool added = false;
-            lock (_shipLock)
-            {
-                int botCount = shipList.Count(s => s.IsBot);
-                if (botCount < MinBotCount)
-                {
-                    int toAdd = MinBotCount - botCount;
-                    for (int i = 0; i < toAdd; i++)
-                    {
-                        var bot = new Ship(null)
-                        {
-                            shipName = $"é¶èˆ¹-{(char)('Z' - _botCycle % 26)}",
-                            captainName = "AI",
-                            crewNames = "AI",
-                            IsBot = true
-                        };
-                        _botCycle++;
-                        bot.moveTimer.Stop();
-                        bot.fireTimer.Stop();
-                        shipList.Add(bot);
+                        CheckShipHit(shipList, ship);
+                        //ship.fx = -1;²»ÊÇÔÚÕâ£¬ÔÚ·¢ËÍºóÔÙÉèÖÃÎª-1£¬ÕâÑù¿ÉÒÔ±£Ö¤ÔÚ·¢ËÍ¸ø¿Í»§¶ËÊ±fxºÍfyµÄÖµÊÇÕıÈ·µÄ
+                        //ship.fy = -1;
                     }
-                    added = true;
                 }
-            }
-            if (added)
-            {
-                List<Ship> snapshot;
-                lock (_shipLock) { snapshot = shipList.ToList(); }
-                SendToAll(snapshot, GetAllShipName());
-                AddMessage("å·²è¡¥å……æœºå™¨äººé¶èˆ¹");
+                //¹¥»÷ÅĞ¶¨Íê³ÉºóÍ³Ò»·¢ËÍËùÓĞ´¬Ö»×´Ì¬¸ø¿Í»§¶Ë
+                string str = "Data,";
+                foreach (var ship in shipList)
+                {
+                    str += $"{ship.shipID},{ship.px},{ship.py},{ship.fx},{ship.fy},{ship.hp},{ship.score},";                    
+                    //·¢ËÍÍêºóÖØÖÃfxºÍfy
+                    ship.fx = -1;
+                    ship.fy = -1;
+                }
+                str.TrimEnd(',');
+                SendToAll(shipList, str);
+                pictureBox1.Invalidate();
             }
         }
 
         public void CheckShipHit(List<Ship> shipList, Ship attacker)
         {
+            // ¿ÕÖµĞ£Ñé
             if (shipList == null || attacker == null)
                 return;
 
+            // ±éÀúËùÓĞ´¬Ö»¼ì²â»÷ÖĞ×´Ì¬
             foreach (var targetShip in shipList)
             {
+                // Ìø¹ı¹¥»÷Õß×ÔÉí£¨±ÜÃâ×Ô»÷£©
                 if (targetShip.shipID == attacker.shipID)
                     continue;
 
+                // ÅĞ¶ÏÊÇ·ñ»÷ÖĞ£ºÄ¿±ê´¬µÄ×ø±êµÈÓÚ¹¥»÷×ø±ê£¨fx/fy£©
                 if (targetShip.px == attacker.fx && targetShip.py == attacker.fy)
                 {
-                    AddMessage($"å‘½ä¸­ {targetShip.shipID}ï¼Œå½“å‰HP: {targetShip.hp}");
+                    AddMessage($"½¢¶Ó {targetShip.shipID} ±»»÷ÖĞ£¡µ±Ç°HP: {targetShip.hp}");
 
+                    // HP¼õ1
                     targetShip.hp--;
 
+                    // Èç¹ûHP¼õÎª0£¬´¦ÀíÖØÉúºÍ¹¥»÷ÕßµÃ·Ö
                     if (targetShip.hp <= 0)
                     {
-                        AddMessage($"å‡»æ²‰ {targetShip.shipID}ï¼Œæ­£åœ¨é‡ç”Ÿ...");
+                        AddMessage($"½¢¶Ó {targetShip.shipID} ±»»÷³Á£¡ÕıÔÚÖØÉú...");
                         targetShip.ReSet();
-
+                        
+                        // ¹¥»÷ÕßµÃ·Ö+1
                         attacker.score++;
-                        attacker.hp = 3;
-                        AddMessage($"æ”»å‡»è€… {attacker.shipID} å¾—åˆ†+1ï¼Œå½“å‰å¾—åˆ†: {attacker.score}");
+                        attacker.hp = 3; // ÖØÖÃ¹¥»÷ÕßHP£¨Èç¹ûĞèÒª£©
+                        AddMessage($"¹¥»÷Õß {attacker.shipID} µÃ·Ö+1£¬µ±Ç°µÃ·Ö: {attacker.score}");
                     }
-                    break;  // ä¸€å‘ç‚®å¼¹åªå‘½ä¸­ä¸€ä¸ªç›®æ ‡
                 }
             }
         }
@@ -176,19 +115,16 @@ namespace Server2026
 
             if (serverIP != null)
             {
-                tcpListener = new TcpListener(IPAddress.Any, tcpPort);
+                tcpListener = new TcpListener(serverIP, tcpPort);
                 tcpListener.Start();
                 isListening = true;
-                AddMessage($"å¼€å§‹ä¾¦å¬{serverIP}:{tcpPort}ï¼Œç­‰å¾…å®¢æˆ·è¿æ¥");
-                this.Text = $"å¤§æµ·æˆ˜ æœåŠ¡ç«¯ 0.0.1 - {serverIP}:{tcpPort}";
+                AddMessage($"¿ªÊ¼ÔÚ{serverIP}:{tcpPort}¼àÌı½¢¶ÓÁ¬½Ó");
                 Thread listenThread = new(ListenClientConnect);
                 listenThread.Start();
-
-                SpawnBots();
             }
             else
             {
-                AddMessage("è·å–IPv4å¤±è´¥ï¼Œæ— æ³•é€šè¿‡IPv4ä¾¦å¬å®¢æˆ·è¿æ¥");
+                AddMessage("»ñÈ¡IPv4Ê§°Ü£¬ÎŞ·¨Í¨¹ıIPv4¼àÌı¿Í»§¶ËÁ¬½Ó");
             }
         }
 
@@ -200,29 +136,33 @@ namespace Server2026
                 TcpClient newClient = new();
                 try
                 {
-                    newClient = tcpListener.AcceptTcpClient();
+                    newClient = tcpListener.AcceptTcpClient();  //µÈ´ıÓÃ»§½øÈë
                 }
                 catch (Exception ex)
                 {
-                    AddMessage($"ç­‰å¾…ç”¨æˆ·è¿æ¥å¼‚å¸¸ï¼š{ex.Message}");
-                    AddMessage("å³å°†åœæ­¢æ¥æ”¶å®¢æˆ·è¿æ¥");
+                    AddMessage($"µÈ´ıÓÃ»§½øÈë³ö´í£º{ex.Message}");
+                    AddMessage("ÒÑÖÕÖ¹½ÓÊÕ¿Í»§¶ËÁ¬½Ó");
                     break;
                 }
                 Ship ship = new(newClient);
-                lock (_shipLock) { shipList.Add(ship); }
-                AddMessage($"æ¥è‡ª {newClient.Client.RemoteEndPoint} åŠ å…¥æ¸¸æˆ");
-                lock (_shipLock) { AddMessage($"å½“å‰åœ¨çº¿ç”¨æˆ·æ•°ï¼š{shipList.Count}"); }
+                shipList.Add(ship);
+                AddMessage($"¡¾{newClient.Client.RemoteEndPoint}¡¿½øÈëº£Óò");
+                AddMessage($"µ±Ç°Á¬½ÓÓÃ»§Êı£º{shipList.Count}");
 
                 Thread receiveThread = new(ReceiveData);
                 receiveThread.Start(ship);
             }
         }
 
+        //Ã¿¸ö¿Í»§¶Ë¶ÔÓ¦Ò»¸öReceiveDataÏß³Ì£¬ÓÃÓÚ½ÓÊÕ¸Ã¿Í»§¶Ë·¢ËÍµÄÏûÏ¢²¢½øĞĞ´¦Àí
         public void ReceiveData(object? obj)
         {
-            if (obj == null) return;
+            if (obj == null)
+            {
+                return;
+            }
             Ship ship = (Ship)obj;
-            bool exitWhile = false;
+            bool exitWhile = false;   //ÓÃÓÚ¿ØÖÆÊÇ·ñÍË³öÑ­»·
             while (exitWhile == false)
             {
                 string? receiveString = null;
@@ -232,42 +172,46 @@ namespace Server2026
                 }
                 catch (Exception ex)
                 {
-                    AddMessage($"æ¥æ”¶æ•°æ®å¤±è´¥ï¼š{ex.Message}");
+                    //¸Ã¿Í»§µ×²ãÌ×½Ó×Ö²»´æÔÚÊ±»á³öÏÖÒì³£
+                    AddMessage($"½ÓÊÕÊı¾İÊ§°Ü£º{ex.Message}");
+                    //ÒÆ³ı¸ÃÓÃ»§
                     RemoveShip(ship);
                 }
                 if (receiveString == null)
                 {
-                    if (ship.Client != null && ship.Client.Connected == true)
+                    if (ship.Client != null)
                     {
-                        AddMessage($"ä¸ {ship.Client.Client.RemoteEndPoint} å¤±å»è”ç³»ï¼Œåœæ­¢æ¥æ”¶è¯¥ç”¨æˆ·ä¿¡æ¯");
+                        if (ship.Client.Connected == true) //true±íÊ¾Î´Í£Ö¹¼àÌı
+                        {
+                            AddMessage($"Óë{ship.Client.Client.RemoteEndPoint}Ê§È¥ÁªÏµ£¬ÒÑÖÕÖ¹½ÓÊÕ¸ÃÓÃ»§ĞÅÏ¢");
+
+                            //·¢ËÍ¸ñÊ½£ºLost£¬×ùÎ»ºÅ£¬ÓÃ»§Ãû
+                            //Service.SendToOne(user1, $"Lost,{j},{user1}");
+
+                        }
                     }
-                    ship.moveTimer.Stop();
-                    ship.fireTimer.Stop();
                     RemoveShip(ship);
-                    break;
+                    break;  //ÍË³öÑ­»·
                 }
+                //ÆµÂÊ½Ï¸ßµÄÏûÏ¢¿ÉÒÔ²»ÏÔÊ¾ÔÚ·şÎñÆ÷½çÃæÉÏ£¬»òÕßÖ»ÏÔÊ¾²¿·ÖÄÚÈİ
+                //AddMessage($"-----À´×Ô{ship.shipName}£º{receiveString}");
                 try
                 {
                     string[] splitString = receiveString.Split(',');
                     string command = splitString[0].ToLower();
                     switch (command)
                     {
-                        case "login":
-                            if (splitString.Length < 4) break;
+                        case "login":  //¸ÃÓÃ»§¸Õ¸ÕµÇÂ¼(¸ñÊ½£ºLogin,shipName,CaptainName)
                             ship.shipName = splitString[1];
                             ship.captainName = splitString[2];
                             ship.crewNames = splitString[3];
-                            {
-                                List<Ship> snapshot;
-                                lock (_shipLock) { snapshot = shipList.ToList(); }
-                                SendToAll(snapshot, GetAllShipName());
-                            }
+                            SendToAll(shipList, GetAllShipName());                            
                             break;
-                        case "logout":
-                            AddMessage($"{ship.shipName} é€€å‡ºæ¸¸æˆ");
-                            exitWhile = true;
+                        case "logout":  //ÓÃ»§ÍË³öÓÎÏ·ÊÒ(¸ñÊ½£ºLogout)
+                            AddMessage($"{ship.shipName}ÍË³öº£Óò");
+                            exitWhile = true;   //Í£Ö¹½ÓÊÕ¸Ã¿Í»§¶ËÏûÏ¢
                             break;
-                        case "move":
+                        case "move":  //Move,x,y(x,yÈ¡Öµ·¶Î§[-1,1])
                             if (ship.allowMove)
                             {
                                 int x = int.Parse(splitString[1]);
@@ -276,67 +220,54 @@ namespace Server2026
                                 y = Math.Clamp(y, -1, 1);
                                 ship.px += x;
                                 ship.py += y;
-                                ship.px = Math.Clamp(ship.px, 0, 100);
-                                ship.py = Math.Clamp(ship.py, 0, 100);
+                                ship.px = Math.Clamp(ship.px, 1, 100);
+                                ship.py = Math.Clamp(ship.py, 1, 100);
                                 ship.allowMove = false;
                             }
                             break;
-                        case "fire":
+                        case "fire":  //Fire,x,y(x,yÈ¡Öµ·¶Î§[-5,5]£¬ĞèÂú×ãx2+y2¡Ü25)
                             if (ship.allowFire)
                             {
-                                int dx = int.Parse(splitString[1]);
-                                int dy = int.Parse(splitString[2]);
-                                var result = ClampToCircle(dx, dy);
-                                ship.fx = ship.px + result.limitedX;
-                                ship.fy = ship.py + result.limitedY;
+                                int x = int.Parse(splitString[1]);
+                                int y = int.Parse(splitString[2]);
+                                var result = ClampToCircle(x, y);
+                                ship.fx = result.limitedX;
+                                ship.fy = result.limitedY;
                                 ship.allowFire = false;
                             }
                             break;
                         default:
-                            {
-                                List<Ship> snapshot;
-                                lock (_shipLock) { snapshot = shipList.ToList(); }
-                                SendToAll(snapshot, "æœªçŸ¥æ•°æ®ï¼š" + receiveString);
-                            }
+                            SendToAll(shipList, "Î´ÖªÄÚÈİ£º" + receiveString);
                             break;
                     }
                 }
                 catch (Exception)
                 {
-                    AddMessage($"è§£æå¼‚å¸¸ {ship.shipName}:{receiveString}");
+                    AddMessage($"ÄÚÈİÒì³£ {ship.shipName}:{receiveString}");
                 }
             }
-            ship.moveTimer.Stop();
-            ship.fireTimer.Stop();
-            ship.SWriter?.Close();
-            ship.SReader?.Close();
             ship.Client?.Close();
             RemoveShip(ship);
-            pictureBox1.Invalidate();
-            List<Ship> remaining;
-            lock (_shipLock) { remaining = shipList.ToList(); }
-            SendToAll(remaining, GetAllShipName());
+            //AddMessage($"ÓĞÒ»¸öÓÃ»§ÍË³ö£¬Ê£ÓàÁ¬½ÓÓÃ»§Êı£º{shipList.Count}");
+            SendToAll(shipList, GetAllShipName());
         }
 
         public string GetAllShipName()
         {
             string str = "Online,";
-            List<Ship> snapshot;
-            lock (_shipLock) { snapshot = shipList.ToList(); }
-            foreach (var ship in snapshot)
+            foreach (var ship in shipList)
             {
                 str += $"{ship.shipID},{ship.shipName},{ship.captainName},{ship.crewNames},";
             }
-            str = str.TrimEnd(',');
+            str.TrimEnd(',');
             return str;
         }
 
         private void RemoveShip(Ship ship)
         {
-            lock (_shipLock)
+            if (shipList.Contains(ship))
             {
-                if (shipList.Contains(ship))
-                    shipList.Remove(ship);
+                shipList.Remove(ship);
             }
         }
 
@@ -350,11 +281,12 @@ namespace Server2026
 
         private void IPToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            MessageBox.Show($"æœåŠ¡å™¨IPï¼š{serverIP} ç«¯å£ï¼š{tcpPort}");
+            MessageBox.Show($"·şÎñÆ÷IP£º{serverIP} ¶Ë¿Ú£º{tcpPort}");
         }
 
         private void SaveToolStripMenuItem_Click(object sender, EventArgs e)
         {
+
         }
 
         private void QuitToolStripMenuItem_Click(object sender, EventArgs e)
@@ -362,24 +294,6 @@ namespace Server2026
             tcpListener?.Stop();
             Application.Exit();
         }
-
-        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
-        {
-            updateTimer.Stop();
-            isListening = false;
-            tcpListener?.Stop();
-
-            List<Ship> snapshot;
-            lock (_shipLock) { snapshot = shipList.ToList(); }
-            foreach (var ship in snapshot)
-            {
-                ship.Client?.Close();
-            }
-            lock (_shipLock) { shipList.Clear(); }
-
-            Environment.Exit(0);
-        }
-
         public IPAddress? GetIpV4Address()
         {
             IPAddress[] addrIP = Dns.GetHostAddresses(Dns.GetHostName());
@@ -402,17 +316,18 @@ namespace Server2026
             {
                 ship.SWriter.WriteLine(message);
                 ship.SWriter.Flush();
+                //AddMessage($"Ïò{ship.shipName}·¢ËÍ{message}");
             }
             catch (Exception ex)
             {
-                AddMessage($"å‘{ship.shipName}å‘é€æ¶ˆæ¯å¤±è´¥ï¼š{ex.Message}");
+                AddMessage($"Ïò{ship.shipName}·¢ËÍĞÅÏ¢Ê§°Ü£º{ex.Message}");
                 RemoveShip(ship);
             }
         }
 
-        public void SendToAll(List<Ship> ships, string str)
+        public void SendToAll(List<Ship> shipList, string str)
         {
-            foreach (Ship ship in ships)
+            foreach (Ship ship in shipList)
             {
                 if (ship.Client != null)
                 {
@@ -431,6 +346,7 @@ namespace Server2026
                 }
                 catch
                 {
+                    //do nothing
                 }
             }
             else
@@ -443,17 +359,25 @@ namespace Server2026
 
         public (int limitedX, int limitedY) ClampToCircle(int x, int y)
         {
+            // Ô²µÄ°ë¾¶£¨¹Ì¶¨Îª5£©
             const float radius = 5f;
 
+            // ¼ÆËãµãµ½Ô²ĞÄ(0,0)µÄ¾àÀëÆ½·½£¨±ÜÃâ¿ª¸ùºÅ£¬ĞÔÄÜ¸ü¸ß£©
             float squaredDistance = x * x + y * y;
 
+            // Èç¹ûµãÔÚÔ²ÄÚ/Ô²ÉÏ£¬Ö±½Ó·µ»ØÔ­×ø±ê
             if (squaredDistance <= radius * radius)
             {
                 return (x, y);
             }
 
+            // ¼ÆËãÊµ¼Ê¾àÀë
             float distance = (float)Math.Sqrt(squaredDistance);
+
+            // ¼ÆËãËõ·Å±ÈÀı£¬½«µãÀ­µ½Ô²±ßÔµ
             float scale = radius / distance;
+
+            // ¼ÆËãÏŞÖÆºóµÄ×ø±ê
             int limitedX = (int)(x * scale);
             int limitedY = (int)(y * scale);
 

@@ -38,6 +38,14 @@ public partial class Main : Form
     private readonly SolidBrush _cdReadyBrush;
     private readonly SolidBrush _cdChargingBrush;
 
+    // Minimap
+    private readonly Pen _minimapBorderPen;
+    private readonly Pen _minimapRangePen;
+    private readonly SolidBrush _minimapSelfBrush;
+    private readonly SolidBrush _minimapEnemyBrush;
+    private readonly SolidBrush _minimapInRangeBrush;
+    private readonly SolidBrush _minimapBgBrush;
+
     private static readonly Color BgColor = Color.FromArgb(16, 40, 72);
     private static readonly Color GridColor = Color.FromArgb(30, 60, 100);
     private static readonly Color SelfColor = Color.LimeGreen;
@@ -66,6 +74,12 @@ public partial class Main : Form
         _cdChargingPen = new Pen(Color.Red, 2);
         _cdReadyBrush = new SolidBrush(Color.FromArgb(60, 0, 255, 0));
         _cdChargingBrush = new SolidBrush(Color.FromArgb(60, 255, 0, 0));
+        _minimapBorderPen = new Pen(Color.FromArgb(80, 255, 255, 255), 1);
+        _minimapRangePen = new Pen(Color.FromArgb(60, 255, 255, 255), 1);
+        _minimapSelfBrush = new SolidBrush(Color.LimeGreen);
+        _minimapEnemyBrush = new SolidBrush(Color.OrangeRed);
+        _minimapInRangeBrush = new SolidBrush(Color.Orange);
+        _minimapBgBrush = new SolidBrush(Color.FromArgb(180, 10, 30, 60));
 
         this.Disposed += (s, e) =>
         {
@@ -86,12 +100,33 @@ public partial class Main : Form
             _cdChargingPen.Dispose();
             _cdReadyBrush.Dispose();
             _cdChargingBrush.Dispose();
+            _minimapBorderPen.Dispose();
+            _minimapRangePen.Dispose();
+            _minimapSelfBrush.Dispose();
+            _minimapEnemyBrush.Dispose();
+            _minimapInRangeBrush.Dispose();
+            _minimapBgBrush.Dispose();
         };
 
         _gameTimer.Tick += GameTick;
         _moveTimer.Tick += MoveTick;
         _fireTimer.Tick += FireTick;
         pbBattlefield.MouseClick += PbBattlefield_MouseClick;
+        this.Resize += (s, e) => PositionMinimap();
+        PositionMinimap();
+    }
+
+    /// <summary>
+    /// Positions the minimap at the top-right corner of the battlefield.
+    /// </summary>
+    private void PositionMinimap()
+    {
+        if (pbMinimap == null || pbBattlefield == null) return;
+        int margin = 12;
+        pbMinimap.Location = new Point(
+            pbBattlefield.Right - pbMinimap.Width - margin,
+            pbBattlefield.Top + margin);
+        pbMinimap.BringToFront();
     }
 
     private async void BtnConnect_Click(object sender, EventArgs e)
@@ -228,6 +263,7 @@ public partial class Main : Form
     {
         ProcessMessages();
         RenderBattlefield();
+        RenderMinimap();
         UpdateShipStatus();
     }
 
@@ -380,6 +416,47 @@ public partial class Main : Form
             await FireAt(bestTarget);
     }
 
+    private async void PbMinimap_MouseClick(object? sender, MouseEventArgs e)
+    {
+        // Placeholder: clicking the minimap could later be used to jump
+        // the main view to that location if zoom/pan is implemented.
+        // For now, treat it the same as clicking the main battlefield.
+        if (_net == null || !_canFire || _state?.LocalShip == null) return;
+
+        int size = pbMinimap.Width;
+        float scale = 100f / size;
+        int clickGridX = (int)(e.X * scale);
+        int clickGridY = (int)(e.Y * scale);
+
+        Fleet? bestTarget = null;
+        double bestDist = double.MaxValue;
+        int rangeSq = 5 * 5;
+
+        foreach (var ship in _state.AllShips)
+        {
+            if (ship == _state.LocalShip) continue;
+
+            int dx = ship.Px - _state.LocalShip.Px;
+            int dy = ship.Py - _state.LocalShip.Py;
+            int distSq = dx * dx + dy * dy;
+
+            if (distSq > rangeSq) continue;
+
+            double distToClick = Math.Sqrt(
+                (ship.Px - clickGridX) * (ship.Px - clickGridX) +
+                (ship.Py - clickGridY) * (ship.Py - clickGridY));
+
+            if (distToClick < bestDist)
+            {
+                bestDist = distToClick;
+                bestTarget = ship;
+            }
+        }
+
+        if (bestTarget != null)
+            await FireAt(bestTarget);
+    }
+
     private async Task FireAt(Fleet target)
     {
         if (_net == null || _state?.LocalShip == null) return;
@@ -400,6 +477,85 @@ public partial class Main : Form
         _fireTimer.Stop();
         _fireTimer.Start();
         await _net.SendCommandAsync($"Fire,{dx},{dy}");
+    }
+
+    /// <summary>
+    /// Renders a small overview minimap showing all ship positions at a glance.
+    /// </summary>
+    private void RenderMinimap()
+    {
+        int size = pbMinimap.Width;
+        if (size <= 0) return;
+
+        var bitmap = new Bitmap(size, size);
+        try
+        {
+            using var g = Graphics.FromImage(bitmap);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            float scale = size / 100f;
+            int dotRadius = 3;
+
+            // Background
+            g.FillRectangle(_minimapBgBrush, 0, 0, size, size);
+            g.DrawRectangle(_minimapBorderPen, 0, 0, size - 1, size - 1);
+
+            if (_state == null) { pbMinimap.Image = bitmap; bitmap = null; return; }
+
+            // Determine which enemies are in range of local ship
+            var inRange = new HashSet<Fleet>();
+            if (_state.LocalShip != null)
+            {
+                int rangeSq = 5 * 5;
+                foreach (var ship in _state.AllShips)
+                {
+                    if (ship == _state.LocalShip) continue;
+                    int dx = ship.Px - _state.LocalShip.Px;
+                    int dy = ship.Py - _state.LocalShip.Py;
+                    if (dx * dx + dy * dy <= rangeSq)
+                        inRange.Add(ship);
+                }
+            }
+
+            // Draw ships
+            foreach (var ship in _state.AllShips)
+            {
+                bool isLocal = ship == _state.LocalShip;
+                bool shipInRange = inRange.Contains(ship);
+                float sx = ship.Px * scale;
+                float sy = ship.Py * scale;
+
+                var brush = isLocal ? _minimapSelfBrush
+                    : shipInRange ? _minimapInRangeBrush
+                    : _minimapEnemyBrush;
+
+                // Local ship slightly larger
+                int r = isLocal ? dotRadius + 1 : dotRadius;
+                g.FillEllipse(brush, sx - r, sy - r, r * 2, r * 2);
+
+                // White border for local ship
+                if (isLocal)
+                    g.DrawEllipse(Pens.White, sx - r, sy - r, r * 2, r * 2);
+            }
+
+            // Local ship range circle
+            if (_state.LocalShip != null)
+            {
+                float cx = _state.LocalShip.Px * scale;
+                float cy = _state.LocalShip.Py * scale;
+                float rangePx = 5 * scale;
+                g.DrawEllipse(_minimapRangePen, cx - rangePx, cy - rangePx, rangePx * 2, rangePx * 2);
+            }
+
+            var oldImage = pbMinimap.Image;
+            pbMinimap.Image = bitmap;
+            oldImage?.Dispose();
+            bitmap = null;
+        }
+        finally
+        {
+            bitmap?.Dispose();
+        }
     }
 
     /// <summary>
@@ -426,12 +582,26 @@ public partial class Main : Form
 
             g.Clear(BgColor);
 
-            // Draw grid lines
-            for (int i = 0; i <= gridSize; i++)
+            // Draw grid lines — dynamic density based on cell pixel size
+            int gridStep = cellSize >= 15 ? 1 : cellSize >= 8 ? 2 : cellSize >= 5 ? 5 : 10;
+            for (int i = 0; i <= gridSize; i += gridStep)
             {
                 float p = i * cellSize;
                 g.DrawLine(_gridPen, offsetX + p, offsetY, offsetX + p, offsetY + gridSize * cellSize);
                 g.DrawLine(_gridPen, offsetX, offsetY + p, offsetX + gridSize * cellSize, offsetY + p);
+            }
+
+            // Subtle minor lines when step > 1 and cells are large enough
+            if (gridStep > 1 && cellSize >= 5)
+            {
+                using var minorPen = new Pen(Color.FromArgb(15, 50, 80), 1);
+                for (int i = 1; i <= gridSize; i++)
+                {
+                    if (i % gridStep == 0) continue;
+                    float p = i * cellSize;
+                    g.DrawLine(minorPen, offsetX + p, offsetY, offsetX + p, offsetY + gridSize * cellSize);
+                    g.DrawLine(minorPen, offsetX, offsetY + p, offsetX + gridSize * cellSize, offsetY + p);
+                }
             }
 
             if (_state == null) { pbBattlefield.Image = bitmap; bitmap = null; return; }

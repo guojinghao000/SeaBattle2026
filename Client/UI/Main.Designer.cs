@@ -195,7 +195,22 @@
             lblShipStatus.Size = new Size(280, 30);
             lblShipStatus.TabIndex = 5;
             lblShipStatus.TextAlign = ContentAlignment.MiddleLeft;
-            // 
+            //
+            // pbMinimap
+            //
+            pbMinimap = new PictureBox();
+            pbMinimap.BackColor = Color.FromArgb(180, 10, 30, 60);
+            pbMinimap.Size = new Size(150, 150);
+            pbMinimap.Location = new Point(0, 0); // 实际位置在运行时根据 pbBattlefield 计算
+            pbMinimap.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            pbMinimap.Name = "pbMinimap";
+            pbMinimap.TabIndex = 10;
+            pbMinimap.TabStop = false;
+            pbMinimap.SizeMode = PictureBoxSizeMode.Normal;
+            Controls.Add(pbMinimap);
+            pbMinimap.BringToFront();
+            pbMinimap.MouseClick += PbMinimap_MouseClick;
+            //
             // Main
             // 
             AutoScaleDimensions = new SizeF(9F, 20F);
@@ -223,6 +238,7 @@
         }
 
         private PictureBox pbBattlefield;
+        private PictureBox pbMinimap;
         private GroupBox gbLogin;
         private Button btnConnect;
         private TextBox txtCrew;

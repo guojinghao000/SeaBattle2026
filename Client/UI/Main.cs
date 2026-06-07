@@ -148,6 +148,7 @@ public partial class Main : Form
     private void GameTick(object? sender, EventArgs e)
     {
         ProcessMessages();
+        TryFireAtNearestTarget();
         pbBattlefield.Invalidate();
         UpdateShipStatus();
     }
@@ -199,7 +200,6 @@ public partial class Main : Form
             case Keys.S or Keys.Down: _moveDx = 0; _moveDy = 1; break;
             case Keys.A or Keys.Left: _moveDx = -1; _moveDy = 0; break;
             case Keys.D or Keys.Right: _moveDx = 1; _moveDy = 0; break;
-            case Keys.Space or Keys.F: TryFireAtNearestTarget(); break;
         }
     }
 
@@ -264,10 +264,6 @@ public partial class Main : Form
         _canFire = false;
         await _net.SendCommandAsync($"Fire,{dx},{dy}");
         _fireTimer.Start();
-    }
-
-    private void PbBattlefield_MouseDown(object? sender, MouseEventArgs e)
-    {
     }
 
     private void PbBattlefield_Paint(object? sender, PaintEventArgs e)

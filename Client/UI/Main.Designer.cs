@@ -44,7 +44,6 @@
             pbBattlefield.TabIndex = 0;
             pbBattlefield.TabStop = false;
             pbBattlefield.Paint += PbBattlefield_Paint;
-            pbBattlefield.MouseDown += PbBattlefield_MouseDown;
             // 
             // gbLogin
             // 
@@ -60,14 +59,14 @@
             gbLogin.Controls.Add(lblIP);
             gbLogin.Location = new Point(624, 12);
             gbLogin.Name = "gbLogin";
-            gbLogin.Size = new Size(280, 230);
+            gbLogin.Size = new Size(400, 230);
             gbLogin.TabIndex = 1;
             gbLogin.TabStop = false;
             gbLogin.Text = "登录";
             // 
             // btnConnect
             // 
-            btnConnect.Location = new Point(89, 190);
+            btnConnect.Location = new Point(150, 189);
             btnConnect.Name = "btnConnect";
             btnConnect.Size = new Size(100, 30);
             btnConnect.TabIndex = 8;
@@ -79,7 +78,7 @@
             // 
             txtCrew.Location = new Point(79, 155);
             txtCrew.Name = "txtCrew";
-            txtCrew.Size = new Size(185, 27);
+            txtCrew.Size = new Size(305, 27);
             txtCrew.TabIndex = 7;
             txtCrew.Text = "水手1,水手2";
             // 
@@ -96,7 +95,7 @@
             // 
             txtCaptain.Location = new Point(79, 120);
             txtCaptain.Name = "txtCaptain";
-            txtCaptain.Size = new Size(185, 27);
+            txtCaptain.Size = new Size(305, 27);
             txtCaptain.TabIndex = 5;
             txtCaptain.Text = "船长";
             // 
@@ -113,7 +112,7 @@
             // 
             txtShipName.Location = new Point(79, 85);
             txtShipName.Name = "txtShipName";
-            txtShipName.Size = new Size(185, 27);
+            txtShipName.Size = new Size(305, 27);
             txtShipName.TabIndex = 3;
             txtShipName.Text = "我的舰队";
             // 
@@ -130,7 +129,7 @@
             // 
             txtIP.Location = new Point(79, 48);
             txtIP.Name = "txtIP";
-            txtIP.Size = new Size(185, 27);
+            txtIP.Size = new Size(305, 27);
             txtIP.TabIndex = 1;
             txtIP.Text = "127.0.0.1";
             // 
@@ -149,7 +148,7 @@
             gbScore.Controls.Add(lstScore);
             gbScore.Location = new Point(624, 300);
             gbScore.Name = "gbScore";
-            gbScore.Size = new Size(280, 200);
+            gbScore.Size = new Size(400, 200);
             gbScore.TabIndex = 2;
             gbScore.TabStop = false;
             gbScore.Text = "击沉数排名";
@@ -164,6 +163,8 @@
             lstScore.Name = "lstScore";
             lstScore.Size = new Size(274, 174);
             lstScore.TabIndex = 0;
+            lstScore.TabStop = false;
+            lstScore.SelectionMode = SelectionMode.None;
             // 
             // lblStatus
             // 
@@ -200,7 +201,7 @@
             // 
             AutoScaleDimensions = new SizeF(9F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(916, 612);
+            ClientSize = new Size(1060, 612);
             Controls.Add(lblShipStatus);
             Controls.Add(btnDisconnect);
             Controls.Add(lblStatus);
@@ -209,7 +210,7 @@
             Controls.Add(pbBattlefield);
             DoubleBuffered = true;
             KeyPreview = true;
-            MinimumSize = new Size(800, 600);
+            MinimumSize = new Size(900, 600);
             Name = "Main";
             Text = "SeaBattle 2026 - 客户端";
             FormClosing += Main_FormClosing;

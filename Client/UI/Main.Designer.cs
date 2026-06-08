@@ -24,6 +24,10 @@
             lblShipName = new Label();
             txtIP = new TextBox();
             lblIP = new Label();
+            gbHints = new GroupBox();
+            lblHint1 = new Label();
+            lblHint2 = new Label();
+            lblHint3 = new Label();
             gbScore = new GroupBox();
             lstScore = new ListBox();
             lblStatus = new Label();
@@ -39,7 +43,7 @@
             pbBattlefield.BackColor = Color.FromArgb(16, 40, 72);
             pbBattlefield.Location = new Point(12, 12);
             pbBattlefield.Name = "pbBattlefield";
-            pbBattlefield.Size = new Size(600, 588);
+            pbBattlefield.Size = new Size(600, 621);
             pbBattlefield.TabIndex = 0;
             pbBattlefield.TabStop = false;
             pbBattlefield.SizeMode = PictureBoxSizeMode.Normal;
@@ -141,11 +145,52 @@
             lblIP.TabIndex = 0;
             lblIP.Text = "服务器 IP";
             // 
+            // gbHints
+            // 
+            gbHints.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            gbHints.Controls.Add(lblHint1);
+            gbHints.Controls.Add(lblHint2);
+            gbHints.Controls.Add(lblHint3);
+            gbHints.Location = new Point(624, 248);
+            gbHints.Name = "gbHints";
+            gbHints.Size = new Size(400, 80);
+            gbHints.TabIndex = 6;
+            gbHints.TabStop = false;
+            gbHints.Text = "操作提示";
+            // 
+            // lblHint1
+            // 
+            lblHint1.AutoSize = false;
+            lblHint1.Location = new Point(6, 20);
+            lblHint1.Name = "lblHint1";
+            lblHint1.Size = new Size(388, 20);
+            lblHint1.TabIndex = 0;
+            lblHint1.Text = "移动: W/A/S/D 或 方向键";
+            lblHint1.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // lblHint2
+            // 
+            lblHint2.AutoSize = true;
+            lblHint2.Location = new Point(6, 40);
+            lblHint2.Name = "lblHint2";
+            lblHint2.Size = new Size(388, 20);
+            lblHint2.TabIndex = 1;
+            lblHint2.Text = "开火: Space / J    点击: 选中目标攻击";
+            // 
+            // lblHint3
+            // 
+            lblHint3.AutoSize = true;
+            lblHint3.Location = new Point(6, 58);
+            lblHint3.Name = "lblHint3";
+            lblHint3.Size = new Size(388, 20);
+            lblHint3.TabIndex = 2;
+            lblHint3.Text = "拖拽: 移动视角  滚轮: 缩放  Home: 跟随舰船";
+            // 
             // gbScore
             // 
             gbScore.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Right;
             gbScore.Controls.Add(lstScore);
-            gbScore.Location = new Point(624, 300);
+            gbScore.Location = new Point(624, 332);
             gbScore.Name = "gbScore";
             gbScore.Size = new Size(400, 200);
             gbScore.TabIndex = 2;
@@ -169,7 +214,7 @@
             // 
             lblStatus.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             lblStatus.AutoSize = true;
-            lblStatus.Location = new Point(624, 503);
+            lblStatus.Location = new Point(624, 535);
             lblStatus.Name = "lblStatus";
             lblStatus.Size = new Size(63, 20);
             lblStatus.TabIndex = 3;
@@ -179,7 +224,7 @@
             // 
             btnDisconnect.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             btnDisconnect.Enabled = false;
-            btnDisconnect.Location = new Point(802, 570);
+            btnDisconnect.Location = new Point(802, 602);
             btnDisconnect.Name = "btnDisconnect";
             btnDisconnect.Size = new Size(100, 30);
             btnDisconnect.TabIndex = 4;
@@ -190,7 +235,7 @@
             // lblShipStatus
             // 
             lblShipStatus.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            lblShipStatus.Location = new Point(624, 530);
+            lblShipStatus.Location = new Point(624, 562);
             lblShipStatus.Name = "lblShipStatus";
             lblShipStatus.Size = new Size(280, 30);
             lblShipStatus.TabIndex = 5;
@@ -215,16 +260,17 @@
             // 
             AutoScaleDimensions = new SizeF(9F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1060, 612);
+            ClientSize = new Size(1060, 645);
             Controls.Add(lblShipStatus);
             Controls.Add(btnDisconnect);
             Controls.Add(lblStatus);
             Controls.Add(gbScore);
+            Controls.Add(gbHints);
             Controls.Add(gbLogin);
             Controls.Add(pbBattlefield);
             DoubleBuffered = true;
             KeyPreview = true;
-            MinimumSize = new Size(900, 600);
+            MinimumSize = new Size(900, 635);
             Name = "Main";
             Text = "SeaBattle 2026 - 客户端";
             FormClosing += Main_FormClosing;
@@ -251,6 +297,10 @@
         private Label lblIP;
         private GroupBox gbScore;
         private ListBox lstScore;
+        private GroupBox gbHints;
+        private Label lblHint1;
+        private Label lblHint2;
+        private Label lblHint3;
         private Label lblStatus;
         private Button btnDisconnect;
         private Label lblShipStatus;

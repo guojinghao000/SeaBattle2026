@@ -46,6 +46,19 @@ public partial class Main : Form
     private readonly SolidBrush _minimapInRangeBrush;
     private readonly SolidBrush _minimapBgBrush;
 
+    // Viewport control
+    private float _viewportCenterX = 50;
+    private float _viewportCenterY = 50;
+    private float _zoomLevel = 1.0f;
+    private bool _isDragging;
+    private Point _dragStartMouse;
+    private float _dragStartViewportX;
+    private float _dragStartViewportY;
+    private bool _followPlayer = true;
+    private float _viewportMinX, _viewportMinY;
+    private float _visibleGridsW, _visibleGridsH;
+    private float _cellSize;
+
     private static readonly Color BgColor = Color.FromArgb(16, 40, 72);
     private static readonly Color GridColor = Color.FromArgb(30, 60, 100);
     private static readonly Color SelfColor = Color.LimeGreen;
@@ -112,6 +125,10 @@ public partial class Main : Form
         _moveTimer.Tick += MoveTick;
         _fireTimer.Tick += FireTick;
         pbBattlefield.MouseClick += PbBattlefield_MouseClick;
+        pbBattlefield.MouseDown += PbBattlefield_MouseDown;
+        pbBattlefield.MouseMove += PbBattlefield_MouseMove;
+        pbBattlefield.MouseUp += PbBattlefield_MouseUp;
+        pbBattlefield.MouseWheel += PbBattlefield_MouseWheel;
         this.Resize += (s, e) => PositionMinimap();
         PositionMinimap();
     }
@@ -316,6 +333,13 @@ public partial class Main : Form
         {
             ManualFire();
         }
+
+        // Home key: reset viewport to follow player
+        if (e.KeyCode == Keys.Home)
+        {
+            _followPlayer = true;
+            _zoomLevel = 1.0f;
+        }
     }
 
     private void Main_KeyUp(object sender, KeyEventArgs e)
@@ -374,16 +398,9 @@ public partial class Main : Form
     {
         if (_net == null || !_canFire || _state?.LocalShip == null) return;
 
-        int w = pbBattlefield.Width;
-        int h = pbBattlefield.Height;
-        float cellSize = Math.Min(w, h) / 100f;
-        float gridPx = 100 * cellSize;
-        float offsetX = (w - gridPx) / 2f;
-        float offsetY = (h - gridPx) / 2f;
-
-        // Convert pixel to grid coordinates
-        int clickGridX = (int)((e.X - offsetX) / cellSize);
-        int clickGridY = (int)((e.Y - offsetY) / cellSize);
+        // Convert screen pixel to grid coordinates using viewport
+        int clickGridX = (int)(e.X / _cellSize + _viewportMinX);
+        int clickGridY = (int)(e.Y / _cellSize + _viewportMinY);
 
         // Find enemy closest to click point within range
         Fleet? bestTarget = null;
@@ -400,7 +417,6 @@ public partial class Main : Form
 
             if (distSq > rangeSq) continue;
 
-            // Distance from click to this ship
             double distToClick = Math.Sqrt(
                 (ship.Px - clickGridX) * (ship.Px - clickGridX) +
                 (ship.Py - clickGridY) * (ship.Py - clickGridY));
@@ -412,8 +428,89 @@ public partial class Main : Form
             }
         }
 
-        if (bestTarget != null)
+        // Only fire if click is close to the target (within 3 grid units)
+        const double maxClickDist = 3.0;
+        if (bestTarget != null && bestDist <= maxClickDist)
             await FireAt(bestTarget);
+    }
+
+    // --- Viewport mouse drag & zoom ---
+
+    private void PbBattlefield_MouseDown(object? sender, MouseEventArgs e)
+    {
+        if (e.Button == MouseButtons.Left)
+        {
+            _isDragging = true;
+            _dragStartMouse = e.Location;
+            _dragStartViewportX = _viewportCenterX;
+            _dragStartViewportY = _viewportCenterY;
+            _followPlayer = false;
+        }
+    }
+
+    private void PbBattlefield_MouseMove(object? sender, MouseEventArgs e)
+    {
+        if (!_isDragging) return;
+
+        float deltaGx = (e.X - _dragStartMouse.X) / _cellSize;
+        float deltaGy = (e.Y - _dragStartMouse.Y) / _cellSize;
+        _viewportCenterX = _dragStartViewportX - deltaGx;
+        _viewportCenterY = _dragStartViewportY - deltaGy;
+
+        // Clamp viewport center so viewport stays within map when possible
+        float halfW = _visibleGridsW / 2f;
+        float halfH = _visibleGridsH / 2f;
+        if (_visibleGridsW <= 100)
+            _viewportCenterX = Math.Clamp(_viewportCenterX, halfW, 100 - halfW);
+        else
+            _viewportCenterX = 50;
+        if (_visibleGridsH <= 100)
+            _viewportCenterY = Math.Clamp(_viewportCenterY, halfH, 100 - halfH);
+        else
+            _viewportCenterY = 50;
+    }
+
+    private void PbBattlefield_MouseUp(object? sender, MouseEventArgs e)
+    {
+        _isDragging = false;
+    }
+
+    private void PbBattlefield_MouseWheel(object? sender, MouseEventArgs e)
+    {
+        // Zoom in/out centered on mouse position
+        float oldZoom = _zoomLevel;
+        float zoomDelta = e.Delta > 0 ? 1.1f : 1f / 1.1f;
+        _zoomLevel = Math.Clamp(_zoomLevel * zoomDelta, 0.5f, 3.0f);
+
+        // Adjust viewport center to zoom toward mouse cursor
+        if (_zoomLevel != oldZoom)
+        {
+            float mouseGx = e.X / _cellSize + _viewportMinX;
+            float mouseGy = e.Y / _cellSize + _viewportMinY;
+
+            // Recalculate cellSize with new zoom
+            int w = pbBattlefield.Width;
+            int h = pbBattlefield.Height;
+            float newBase = Math.Clamp(Math.Min(w, h) / 50f, 8f, 20f);
+            float newCellSize = Math.Clamp(newBase * _zoomLevel, 4f, 30f);
+            float newVisW = w / newCellSize;
+            float newVisH = h / newCellSize;
+
+            _viewportCenterX = mouseGx;
+            _viewportCenterY = mouseGy;
+
+            // Clamp
+            if (newVisW <= 100)
+                _viewportCenterX = Math.Clamp(_viewportCenterX, newVisW / 2f, 100 - newVisW / 2f);
+            else
+                _viewportCenterX = 50;
+            if (newVisH <= 100)
+                _viewportCenterY = Math.Clamp(_viewportCenterY, newVisH / 2f, 100 - newVisH / 2f);
+            else
+                _viewportCenterY = 50;
+
+            _followPlayer = false;
+        }
     }
 
     private async void PbMinimap_MouseClick(object? sender, MouseEventArgs e)
@@ -453,7 +550,8 @@ public partial class Main : Form
             }
         }
 
-        if (bestTarget != null)
+        const double maxClickDist = 3.0;
+        if (bestTarget != null && bestDist <= maxClickDist)
             await FireAt(bestTarget);
     }
 
@@ -547,6 +645,21 @@ public partial class Main : Form
                 g.DrawEllipse(_minimapRangePen, cx - rangePx, cy - rangePx, rangePx * 2, rangePx * 2);
             }
 
+            // Viewport indicator rectangle
+            {
+                float vpX = _viewportMinX * scale;
+                float vpY = _viewportMinY * scale;
+                float vpW = _visibleGridsW * scale;
+                float vpH = _visibleGridsH * scale;
+                // Clamp to minimap bounds
+                vpX = Math.Max(0, vpX);
+                vpY = Math.Max(0, vpY);
+                vpW = Math.Min(vpW, size - vpX);
+                vpH = Math.Min(vpH, size - vpY);
+                using var vpPen = new Pen(Color.FromArgb(200, 255, 255, 255), 1.5f);
+                g.DrawRectangle(vpPen, vpX, vpY, vpW, vpH);
+            }
+
             var oldImage = pbMinimap.Image;
             pbMinimap.Image = bitmap;
             oldImage?.Dispose();
@@ -559,8 +672,8 @@ public partial class Main : Form
     }
 
     /// <summary>
-    /// Renders the battlefield to an off-screen bitmap and displays it.
-    /// This avoids GDI+ conflicts with PictureBox's internal paint handling.
+    /// Renders the battlefield with viewport support: dynamic cell size based on window
+    /// size and zoom level, viewport follows player by default, user can drag/zoom.
     /// </summary>
     private void RenderBattlefield()
     {
@@ -568,65 +681,119 @@ public partial class Main : Form
         int h = pbBattlefield.Height;
         if (w <= 0 || h <= 0) return;
 
+        // --- Calculate cell size: aim ~50 cells on the smaller axis ---
+        float baseCellSize = Math.Min(w, h) / 50f;
+        baseCellSize = Math.Clamp(baseCellSize, 8f, 20f);
+        _cellSize = Math.Clamp(baseCellSize * _zoomLevel, 4f, 30f);
+
+        // --- Follow player ---
+        if (_followPlayer && _state?.LocalShip != null)
+        {
+            _viewportCenterX = _state.LocalShip.Px;
+            _viewportCenterY = _state.LocalShip.Py;
+        }
+
+        // --- Calculate viewport bounds in grid coordinates ---
+        _visibleGridsW = w / _cellSize;
+        _visibleGridsH = h / _cellSize;
+        _viewportMinX = _viewportCenterX - _visibleGridsW / 2f;
+        _viewportMinY = _viewportCenterY - _visibleGridsH / 2f;
+
+        // Clamp to map bounds [0, 100]
+        if (_visibleGridsW <= 100)
+            _viewportMinX = Math.Clamp(_viewportMinX, 0, 100 - _visibleGridsW);
+        else
+            _viewportMinX = (100 - _visibleGridsW) / 2f;
+
+        if (_visibleGridsH <= 100)
+            _viewportMinY = Math.Clamp(_viewportMinY, 0, 100 - _visibleGridsH);
+        else
+            _viewportMinY = (100 - _visibleGridsH) / 2f;
+
+        // Snap viewport to integer grid so ships and grid lines align exactly
+        _viewportMinX = (float)Math.Floor(_viewportMinX);
+        _viewportMinY = (float)Math.Floor(_viewportMinY);
+        _viewportCenterX = _viewportMinX + _visibleGridsW / 2f;
+        _viewportCenterY = _viewportMinY + _visibleGridsH / 2f;
+
+        float viewportMaxX = _viewportMinX + _visibleGridsW;
+        float viewportMaxY = _viewportMinY + _visibleGridsH;
+
+        // Grid → screen helper
+        float ToScreenX(float gx) => (gx - _viewportMinX) * _cellSize;
+        float ToScreenY(float gy) => (gy - _viewportMinY) * _cellSize;
+
         var bitmap = new Bitmap(w, h);
         try
         {
             using var g = Graphics.FromImage(bitmap);
             g.SmoothingMode = SmoothingMode.AntiAlias;
 
-            float cellSize = Math.Min(w, h) / 100f;
-            float gridPx = 100 * cellSize;
-            float offsetX = (w - gridPx) / 2f;
-            float offsetY = (h - gridPx) / 2f;
-            int gridSize = 100;
-
             g.Clear(BgColor);
 
-            // Draw grid lines — dynamic density based on cell pixel size
-            int gridStep = cellSize >= 15 ? 1 : cellSize >= 8 ? 2 : cellSize >= 5 ? 5 : 10;
-            for (int i = 0; i <= gridSize; i += gridStep)
+            // --- Grid step based on cellSize (more granular at small sizes) ---
+            int gridStep = _cellSize >= 12 ? 1 : _cellSize >= 7 ? 2 : _cellSize >= 5 ? 4 : 5;
+
+            // First grid line >= viewportMinX (aligned to gridStep)
+            int startGx = (int)(Math.Ceiling(_viewportMinX / gridStep) * gridStep);
+            int startGy = (int)(Math.Ceiling(_viewportMinY / gridStep) * gridStep);
+
+            // Major grid lines
+            for (int i = startGx; i <= 100 && i <= viewportMaxX; i += gridStep)
             {
-                float p = i * cellSize;
-                g.DrawLine(_gridPen, offsetX + p, offsetY, offsetX + p, offsetY + gridSize * cellSize);
-                g.DrawLine(_gridPen, offsetX, offsetY + p, offsetX + gridSize * cellSize, offsetY + p);
+                float sx = ToScreenX(i);
+                g.DrawLine(_gridPen, sx, 0, sx, h);
+            }
+            for (int i = startGy; i <= 100 && i <= viewportMaxY; i += gridStep)
+            {
+                float sy = ToScreenY(i);
+                g.DrawLine(_gridPen, 0, sy, w, sy);
             }
 
-            // Subtle minor lines when step > 1 and cells are large enough
-            if (gridStep > 1 && cellSize >= 5)
+            // Subtle minor lines when step == 2 and cells are large enough
+            if (gridStep == 2 && _cellSize >= 7)
             {
                 using var minorPen = new Pen(Color.FromArgb(15, 50, 80), 1);
-                for (int i = 1; i <= gridSize; i++)
+                int mStartX = (int)Math.Ceiling(_viewportMinX);
+                int mStartY = (int)Math.Ceiling(_viewportMinY);
+                for (int i = mStartX; i <= 100 && i <= viewportMaxX; i++)
                 {
                     if (i % gridStep == 0) continue;
-                    float p = i * cellSize;
-                    g.DrawLine(minorPen, offsetX + p, offsetY, offsetX + p, offsetY + gridSize * cellSize);
-                    g.DrawLine(minorPen, offsetX, offsetY + p, offsetX + gridSize * cellSize, offsetY + p);
+                    float sx = ToScreenX(i);
+                    g.DrawLine(minorPen, sx, 0, sx, h);
+                }
+                for (int i = mStartY; i <= 100 && i <= viewportMaxY; i++)
+                {
+                    if (i % gridStep == 0) continue;
+                    float sy = ToScreenY(i);
+                    g.DrawLine(minorPen, 0, sy, w, sy);
                 }
             }
 
             if (_state == null) { pbBattlefield.Image = bitmap; bitmap = null; return; }
 
-            // Draw range circle around local ship
+            // --- Range circle around local ship ---
             if (_state.LocalShip != null)
             {
-                float cx = offsetX + _state.LocalShip.Px * cellSize;
-                float cy = offsetY + _state.LocalShip.Py * cellSize;
-                float rangePx = 5 * cellSize;
+                float cx = ToScreenX(_state.LocalShip.Px);
+                float cy = ToScreenY(_state.LocalShip.Py);
+                float rangePx = 5 * _cellSize;
                 g.DrawEllipse(_rangePen, cx - rangePx, cy - rangePx, rangePx * 2, rangePx * 2);
             }
 
-            // Draw fire marks
+            // --- Fire marks (only visible ones) ---
             foreach (var ship in _state.AllShips)
             {
                 if (ship.Fx >= 0 && ship.Fy >= 0)
                 {
-                    float fx = offsetX + ship.Fx * cellSize;
-                    float fy = offsetY + ship.Fy * cellSize;
-                    g.FillEllipse(Brushes.Yellow, fx - 4, fy - 4, 8, 8);
+                    float fx = ToScreenX(ship.Fx);
+                    float fy = ToScreenY(ship.Fy);
+                    if (fx >= -8 && fx <= w + 8 && fy >= -8 && fy <= h + 8)
+                        g.FillEllipse(Brushes.Yellow, fx - 4, fy - 4, 8, 8);
                 }
             }
 
-            // Determine which enemies are in range
+            // --- Determine which enemies are in range ---
             var allInRange = new HashSet<Fleet>();
             if (_state.LocalShip != null)
             {
@@ -641,13 +808,18 @@ public partial class Main : Form
                 }
             }
 
-            // Draw ships
+            // --- Draw ships ---
             foreach (var ship in _state.AllShips)
             {
                 bool isLocal = ship == _state.LocalShip;
                 bool inRange = allInRange.Contains(ship);
-                float sx = offsetX + ship.Px * cellSize;
-                float sy = offsetY + ship.Py * cellSize;
+                float sx = ToScreenX(ship.Px);
+                float sy = ToScreenY(ship.Py);
+
+                // Skip ships whose full UI (glow + CD ring + HP bar + label) is outside viewport
+                // Top/left: glow max 16px; Bottom: HP bar at r+8 + label ≈ 38px below center
+                if (sx < -16 || sx > w + 16 || sy < -16 || sy > h + 45) continue;
+
                 float r = isLocal ? 10 : 8;
 
                 // Glow for in-range enemies
@@ -665,11 +837,26 @@ public partial class Main : Form
                 var borderPen = inRange ? _inRangeBorderPen : isLocal ? _selfBorderPen : _enemyBorderPen;
                 g.DrawEllipse(borderPen, sx - r, sy - r, r * 2, r * 2);
 
-                // HP bar
+                // Cooldown ring (drawn before HP bar to avoid overlap)
+                float cdRingR = r + 6;
+                if (ship.FireCooldownMs > 0)
+                {
+                    float cdRatio = Math.Clamp(ship.FireCooldownMs / 2000f, 0f, 1f);
+                    float sweepAngle = cdRatio * 360f;
+                    var cdRect = new RectangleF(sx - cdRingR, sy - cdRingR, cdRingR * 2, cdRingR * 2);
+                    g.DrawArc(_cdChargingPen, cdRect, -90, sweepAngle);
+                }
+                else
+                {
+                    var cdRect = new RectangleF(sx - cdRingR, sy - cdRingR, cdRingR * 2, cdRingR * 2);
+                    g.DrawEllipse(_cdReadyPen, cdRect);
+                }
+
+                // HP bar (below CD ring: r + 8)
                 float barWidth = 24;
                 float barHeight = 4;
                 float barX = sx - barWidth / 2;
-                float barY = sy + r + 2;
+                float barY = sy + r + 8;
                 g.FillRectangle(Brushes.Gray, barX, barY, barWidth, barHeight);
                 float hpRatio = Math.Clamp(ship.HP / 3f, 0, 1);
                 var hpBrush = hpRatio > 0.5f ? _hpGreenBrush : hpRatio > 0.25f ? _hpOrangeBrush : _hpRedBrush;
@@ -682,30 +869,13 @@ public partial class Main : Form
                 float textX = sx - textSize.Width / 2;
                 float textY = barY + barHeight + 1;
                 g.DrawString(label, font, Brushes.White, textX, textY);
-
-                // Cooldown ring
-                float cdRingR = r + 6;
-                if (ship.FireCooldownMs > 0)
-                {
-                    // Draw red arc: full circle = 2000ms, arc shows remaining cooldown
-                    float cdRatio = Math.Clamp(ship.FireCooldownMs / 2000f, 0f, 1f);
-                    float sweepAngle = cdRatio * 360f;
-                    var cdRect = new RectangleF(sx - cdRingR, sy - cdRingR, cdRingR * 2, cdRingR * 2);
-                    g.DrawArc(_cdChargingPen, cdRect, -90, sweepAngle);
-                }
-                else
-                {
-                    // Ready — subtle green ring
-                    var cdRect = new RectangleF(sx - cdRingR, sy - cdRingR, cdRingR * 2, cdRingR * 2);
-                    g.DrawEllipse(_cdReadyPen, cdRect);
-                }
             }
 
             // Display the rendered bitmap
             var oldImage = pbBattlefield.Image;
             pbBattlefield.Image = bitmap;
             oldImage?.Dispose();
-            bitmap = null; // ownership transferred to PictureBox
+            bitmap = null;
         }
         finally
         {

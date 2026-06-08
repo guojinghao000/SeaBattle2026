@@ -83,7 +83,7 @@ The README documents several critical server fixes applied during development:
 - Chinese text encoding was corrupted and has been repaired
 
 ## 新增功能
-- 由于舰船之间的射程一样，目前需要设计自主开火功能，否则几乎都是同归于尽的下场，其次为了更加有竞技性，需要使敌我双方看到开火cd，其余要求请转至`要求.md`
+
 
 ## 要求（非常重要）
 - Server2026_ori文件夹是服务端源文件请勿修改，对于Server2026文件夹中的代码修改要严格参考服务端源文件和`TCP&UDP海战大联机-开发文档 .docx`逻辑功能且需要做尽可能少的修改完成任务

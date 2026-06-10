@@ -192,6 +192,7 @@ public partial class Main : Form
             gbLogin.Enabled = false;
             btnDisconnect.Enabled = true;
             lblStatus.Text = "已连接";
+            _net.ConnectionLost += OnConnectionLost;
         }
         catch (Exception ex)
         {
@@ -212,6 +213,22 @@ public partial class Main : Form
     {
         _showEnemyCooldown = !_showEnemyCooldown;
         btnToggleMode.Text = _showEnemyCooldown ? "完整模式" : "兼容模式";
+    }
+
+    private void OnConnectionLost()
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke(OnConnectionLost);
+            return;
+        }
+
+        if (_net != null)
+            _net.ConnectionLost -= OnConnectionLost;
+
+        MessageBox.Show("与服务器的连接已断开", "连接断开",
+            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        _ = Disconnect();
     }
 
     private void Main_FormClosing(object sender, FormClosingEventArgs e)
@@ -241,6 +258,8 @@ public partial class Main : Form
         _moveTimer.Stop();
         _fireTimer.Stop();
 
+        if (_net != null)
+            _net.ConnectionLost -= OnConnectionLost;
         _net?.Dispose();
         _net = null;
         _state = null;

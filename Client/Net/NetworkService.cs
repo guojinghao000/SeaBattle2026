@@ -22,6 +22,7 @@ public class NetworkService : IDisposable
 
     public ConcurrentQueue<string> ReceivedMessages { get; } = new();
 
+    public event Action? ConnectionLost;
     public bool IsConnected => _tcpClient?.Connected ?? false;
 
     public NetworkService(string serverIp = "127.0.0.1")
@@ -94,7 +95,11 @@ public class NetworkService : IDisposable
             try
             {
                 string? line = _tcpReader.ReadLine();
-                if (line == null) break;
+                if (line == null)
+                {
+                    ConnectionLost?.Invoke();
+                    break;
+                }
                 ReceivedMessages.Enqueue(line);
             }
             catch when (!token.IsCancellationRequested)

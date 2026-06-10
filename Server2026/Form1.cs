@@ -184,6 +184,10 @@ namespace Server2026
                 Thread listenThread = new(ListenClientConnect);
                 listenThread.Start();
 
+                lock (_shipLock)
+                {
+                    shipList.RemoveAll(s => s.IsBot);
+                }
                 SpawnBots();
             }
             else
@@ -234,6 +238,7 @@ namespace Server2026
                 {
                     AddMessage($"接收数据失败：{ex.Message}");
                     RemoveShip(ship);
+                    break;
                 }
                 if (receiveString == null)
                 {
@@ -349,6 +354,14 @@ namespace Server2026
             StopToolStripMenuItem.Enabled = false;
             isListening = false;
             tcpListener?.Stop();
+
+            List<Ship> snapshot;
+            lock (_shipLock) { snapshot = shipList.ToList(); }
+            foreach (var ship in snapshot)
+            {
+                ship.Client?.Close();
+            }
+            lock (_shipLock) { shipList.Clear(); }
         }
 
         private void IPToolStripMenuItem_Click(object sender, EventArgs e)

@@ -32,6 +32,7 @@
             lstScore = new ListBox();
             lblStatus = new Label();
             btnDisconnect = new Button();
+            btnToggleMode = new Button();
             lblShipStatus = new Label();
             gbLogin.SuspendLayout();
             gbScore.SuspendLayout();
@@ -228,9 +229,22 @@
             btnDisconnect.Name = "btnDisconnect";
             btnDisconnect.Size = new Size(100, 30);
             btnDisconnect.TabIndex = 4;
+            btnDisconnect.TabStop = false;
             btnDisconnect.Text = "断开连接";
             btnDisconnect.UseVisualStyleBackColor = true;
             btnDisconnect.Click += BtnDisconnect_Click;
+            // 
+            // btnToggleMode
+            // 
+            btnToggleMode.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            btnToggleMode.Location = new Point(700, 602);
+            btnToggleMode.Name = "btnToggleMode";
+            btnToggleMode.Size = new Size(96, 30);
+            btnToggleMode.TabIndex = 11;
+            btnToggleMode.TabStop = false;
+            btnToggleMode.Text = "完整模式";
+            btnToggleMode.UseVisualStyleBackColor = true;
+            btnToggleMode.Click += BtnToggleMode_Click;
             // 
             // lblShipStatus
             // 
@@ -263,6 +277,7 @@
             ClientSize = new Size(1060, 645);
             Controls.Add(lblShipStatus);
             Controls.Add(btnDisconnect);
+            Controls.Add(btnToggleMode);
             Controls.Add(lblStatus);
             Controls.Add(gbScore);
             Controls.Add(gbHints);
@@ -303,6 +318,7 @@
         private Label lblHint3;
         private Label lblStatus;
         private Button btnDisconnect;
+        private Button btnToggleMode;
         private Label lblShipStatus;
     }
 }

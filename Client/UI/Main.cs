@@ -14,6 +14,7 @@ public partial class Main : Form
     private int _moveDx, _moveDy;
     private bool _canMove = true;
     private bool _canFire = true;
+    private bool _showEnemyCooldown = true;
     private bool _loggedIn;
     private readonly HashSet<Keys> _heldKeys = new();
 
@@ -207,6 +208,12 @@ public partial class Main : Form
         await Disconnect();
     }
 
+    private void BtnToggleMode_Click(object? sender, EventArgs e)
+    {
+        _showEnemyCooldown = !_showEnemyCooldown;
+        btnToggleMode.Text = _showEnemyCooldown ? "完整模式" : "兼容模式";
+    }
+
     private void Main_FormClosing(object sender, FormClosingEventArgs e)
     {
         if (_net != null && _loggedIn)
@@ -269,9 +276,17 @@ public partial class Main : Form
         {
             var s = sorted[i];
             string prefix = s == _state.LocalShip ? "► " : "   ";
-            string cdStatus = s.FireCooldownMs > 0
-                ? $"CD:{s.FireCooldownMs / 1000.0:F1}s"
-                : "就绪  ";
+            string cdStatus;
+            if (s == _state.LocalShip || _showEnemyCooldown)
+            {
+                cdStatus = s.FireCooldownMs > 0
+                    ? $"CD:{s.FireCooldownMs / 1000.0:F1}s"
+                    : "就绪  ";
+            }
+            else
+            {
+                cdStatus = "--    ";
+            }
             lstScore.Items.Add($"{prefix}#{i + 1,-3} {s.ShipName,-12} {s.Score,3}沉  HP:{s.HP}  {cdStatus}");
         }
     }
@@ -324,6 +339,17 @@ public partial class Main : Form
         _canFire = true;
     }
 
+    protected override bool ProcessDialogKey(Keys keyData)
+    {
+        if (keyData is Keys.Up or Keys.Down or Keys.Left or Keys.Right)
+        {
+            _heldKeys.Add(keyData);
+            UpdateMoveDirection();
+            return true;
+        }
+        return base.ProcessDialogKey(keyData);
+    }
+
     private void Main_KeyDown(object sender, KeyEventArgs e)
     {
         _heldKeys.Add(e.KeyCode);
@@ -334,11 +360,17 @@ public partial class Main : Form
             ManualFire();
         }
 
-        // Home key: reset viewport to follow player
         if (e.KeyCode == Keys.Home)
         {
             _followPlayer = true;
             _zoomLevel = 1.0f;
+        }
+
+        if (e.KeyCode is Keys.W or Keys.A or Keys.S or Keys.D or
+            Keys.Space or Keys.J or Keys.Home)
+        {
+            e.Handled = true;
+            e.SuppressKeyPress = true;
         }
     }
 
@@ -838,18 +870,21 @@ public partial class Main : Form
                 g.DrawEllipse(borderPen, sx - r, sy - r, r * 2, r * 2);
 
                 // Cooldown ring (drawn before HP bar to avoid overlap)
-                float cdRingR = r + 6;
-                if (ship.FireCooldownMs > 0)
+                if (isLocal || _showEnemyCooldown)
                 {
-                    float cdRatio = Math.Clamp(ship.FireCooldownMs / 2000f, 0f, 1f);
-                    float sweepAngle = cdRatio * 360f;
-                    var cdRect = new RectangleF(sx - cdRingR, sy - cdRingR, cdRingR * 2, cdRingR * 2);
-                    g.DrawArc(_cdChargingPen, cdRect, -90, sweepAngle);
-                }
-                else
-                {
-                    var cdRect = new RectangleF(sx - cdRingR, sy - cdRingR, cdRingR * 2, cdRingR * 2);
-                    g.DrawEllipse(_cdReadyPen, cdRect);
+                    float cdRingR = r + 6;
+                    if (ship.FireCooldownMs > 0)
+                    {
+                        float cdRatio = Math.Clamp(ship.FireCooldownMs / 2000f, 0f, 1f);
+                        float sweepAngle = cdRatio * 360f;
+                        var cdRect = new RectangleF(sx - cdRingR, sy - cdRingR, cdRingR * 2, cdRingR * 2);
+                        g.DrawArc(_cdChargingPen, cdRect, -90, sweepAngle);
+                    }
+                    else
+                    {
+                        var cdRect = new RectangleF(sx - cdRingR, sy - cdRingR, cdRingR * 2, cdRingR * 2);
+                        g.DrawEllipse(_cdReadyPen, cdRect);
+                    }
                 }
 
                 // HP bar (below CD ring: r + 8)

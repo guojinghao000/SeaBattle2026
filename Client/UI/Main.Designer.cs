@@ -245,7 +245,20 @@
             btnToggleMode.Text = "完整模式";
             btnToggleMode.UseVisualStyleBackColor = true;
             btnToggleMode.Click += BtnToggleMode_Click;
-            // 
+            //
+            // cbAutoBattle
+            //
+            cbAutoBattle = new CheckBox();
+            cbAutoBattle.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            cbAutoBattle.AutoSize = true;
+            cbAutoBattle.Location = new Point(624, 606);
+            cbAutoBattle.Name = "cbAutoBattle";
+            cbAutoBattle.Size = new Size(78, 24);
+            cbAutoBattle.TabIndex = 12;
+            cbAutoBattle.TabStop = false;
+            cbAutoBattle.Text = "自动战斗";
+            cbAutoBattle.UseVisualStyleBackColor = true;
+            //
             // lblShipStatus
             // 
             lblShipStatus.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
@@ -278,6 +291,7 @@
             Controls.Add(lblShipStatus);
             Controls.Add(btnDisconnect);
             Controls.Add(btnToggleMode);
+            Controls.Add(cbAutoBattle);
             Controls.Add(lblStatus);
             Controls.Add(gbScore);
             Controls.Add(gbHints);
@@ -320,5 +334,6 @@
         private Button btnDisconnect;
         private Button btnToggleMode;
         private Label lblShipStatus;
+        private CheckBox cbAutoBattle;
     }
 }

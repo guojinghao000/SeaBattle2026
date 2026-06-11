@@ -31,14 +31,19 @@ public class GameState
 
     private void ProcessOnline(string message)
     {
-        var parts = message.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        // Use regular Split (not RemoveEmptyEntries) to preserve empty fields.
+        // Old server may have trailing comma (TrimEnd bug) or empty crewNames.
+        var parts = message.Split(',');
         // Online,shipID,shipName,CaptainName,crewNames,...
-        // Groups of 4
+        // Groups of 4 fields per ship
         var onlineIds = new HashSet<string>();
 
         for (int i = 1; i + 3 < parts.Length; i += 4)
         {
             string id = parts[i];
+            // Skip empty groups (trailing comma artifact) or invalid IDs
+            if (string.IsNullOrEmpty(id)) continue;
+
             string name = parts[i + 1];
             string captain = parts[i + 2];
             string crew = parts[i + 3];
@@ -84,12 +89,17 @@ public class GameState
 
     private void ProcessData(string message)
     {
-        var parts = message.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        var parts = message.Split(',');
         // Data,shipID,px,py,fx,fy,HP,score[,fireCooldownMs],...
-        // Old server: 7 fields per ship (no FireCooldownMs)
+        // Old server: 7 fields per ship (no FireCooldownMs), may have trailing comma
         // New server: 8 fields per ship (includes FireCooldownMs)
 
-        int dataCount = parts.Length - 1; // exclude "Data," header
+        // Trim trailing empty elements (TrimEnd bug in old server)
+        int lastIndex = parts.Length - 1;
+        while (lastIndex >= 0 && string.IsNullOrEmpty(parts[lastIndex]))
+            lastIndex--;
+
+        int dataCount = lastIndex; // exclude "Data" header at index 0
         if (dataCount <= 0) return;
 
         // Auto-detect fields per ship: check divisibility
@@ -101,9 +111,10 @@ public class GameState
         else
             return; // unknown format, skip
 
-        for (int i = 1; i + fieldsPerShip - 1 < parts.Length; i += fieldsPerShip)
+        for (int i = 1; i + fieldsPerShip - 1 <= lastIndex; i += fieldsPerShip)
         {
             string id = parts[i];
+            if (string.IsNullOrEmpty(id)) continue;
 
             if (!_ships.TryGetValue(id, out var ship))
             {

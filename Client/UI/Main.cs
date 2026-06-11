@@ -330,6 +330,13 @@ public partial class Main : Form
 
         ProcessMessages();
 
+        // Auto-battle AI
+        if (cbAutoBattle.Checked && _state?.LocalShip != null)
+        {
+            AutoMove();
+            AutoFire();
+        }
+
         if (_scoreDirty)
         {
             _scoreDirty = false;
@@ -412,8 +419,15 @@ public partial class Main : Form
             _zoomLevel = 1.0f;
         }
 
+        if (e.KeyCode == Keys.F1)
+        {
+            cbAutoBattle.Checked = !cbAutoBattle.Checked;
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+        }
+
         if (e.KeyCode is Keys.W or Keys.A or Keys.S or Keys.D or
-            Keys.Space or Keys.J or Keys.Home)
+            Keys.Space or Keys.J or Keys.Home or Keys.F1)
         {
             e.Handled = true;
             e.SuppressKeyPress = true;
@@ -460,6 +474,97 @@ public partial class Main : Form
         }
 
         return nearest;
+    }
+
+    /// <summary>
+    /// Find best target in range for auto-battle: prioritize low HP (1-hit kill),
+    /// then nearest distance, then any in-range.
+    /// </summary>
+    private Fleet? GetBestTargetInRange()
+    {
+        if (_state?.LocalShip == null) return null;
+
+        int rangeSq = 5 * 5;
+        Fleet? bestHp1 = null, bestHp2 = null, bestHp3 = null;
+        int bestDistHp1 = int.MaxValue, bestDistHp2 = int.MaxValue, bestDistHp3 = int.MaxValue;
+
+        foreach (var ship in _state.AllShips)
+        {
+            if (ship == _state.LocalShip) continue;
+
+            int dx = ship.Px - _state.LocalShip.Px;
+            int dy = ship.Py - _state.LocalShip.Py;
+            int distSq = dx * dx + dy * dy;
+
+            if (distSq > rangeSq) continue;
+
+            switch (ship.HP)
+            {
+                case 1:
+                    if (distSq < bestDistHp1) { bestDistHp1 = distSq; bestHp1 = ship; }
+                    break;
+                case 2:
+                    if (distSq < bestDistHp2) { bestDistHp2 = distSq; bestHp2 = ship; }
+                    break;
+                default: // 3 or unknown
+                    if (distSq < bestDistHp3) { bestDistHp3 = distSq; bestHp3 = ship; }
+                    break;
+            }
+        }
+
+        return bestHp1 ?? bestHp2 ?? bestHp3;
+    }
+
+    /// <summary>
+    /// Auto-move toward the nearest enemy (any distance, not just in-range).
+    /// Sets _moveDx, _moveDy which MoveTick picks up every 1s.
+    /// </summary>
+    private void AutoMove()
+    {
+        if (_state?.LocalShip == null) return;
+
+        // Find nearest enemy (any distance)
+        Fleet? nearest = null;
+        int minDistSq = int.MaxValue;
+        foreach (var ship in _state.AllShips)
+        {
+            if (ship == _state.LocalShip) continue;
+            int dx = ship.Px - _state.LocalShip.Px;
+            int dy = ship.Py - _state.LocalShip.Py;
+            int distSq = dx * dx + dy * dy;
+            if (distSq < minDistSq) { minDistSq = distSq; nearest = ship; }
+        }
+
+        if (nearest == null) return;
+
+        int targetDx = nearest.Px - _state.LocalShip.Px;
+        int targetDy = nearest.Py - _state.LocalShip.Py;
+        int distSqTarget = targetDx * targetDx + targetDy * targetDy;
+
+        // If within range (radius 5), stop moving to hold position and fire
+        if (distSqTarget <= 25)
+        {
+            _moveDx = 0;
+            _moveDy = 0;
+            return;
+        }
+
+        // Move toward target
+        _moveDx = Math.Sign(targetDx);
+        _moveDy = Math.Sign(targetDy);
+    }
+
+    /// <summary>
+    /// Auto-fire at the best target in range if cooldown is ready.
+    /// </summary>
+    private async void AutoFire()
+    {
+        if (_disconnecting || _net == null || !_canFire) return;
+
+        var target = GetBestTargetInRange();
+        if (target == null) return;
+
+        await FireAt(target);
     }
 
     private async void ManualFire()

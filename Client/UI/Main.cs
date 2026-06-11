@@ -20,6 +20,13 @@ public partial class Main : Form
     private bool _scoreDirty;
     private readonly HashSet<Keys> _heldKeys = new();
 
+    // Advanced AI state
+    private string? _lastTargetId;
+    private enum AiMode { Aggressive, Survivor, Patrol }
+    private AiMode _aiMode = AiMode.Patrol;
+    private int _aiStuckCounter;
+    private int _aiLastPx, _aiLastPy;
+
     // Cached GDI objects to avoid per-frame allocation (prevents AccessViolation)
     private readonly Pen _gridPen;
     private readonly Pen _rangePen;
@@ -134,6 +141,213 @@ public partial class Main : Form
         pbBattlefield.MouseWheel += PbBattlefield_MouseWheel;
         this.Resize += (s, e) => PositionMinimap();
         PositionMinimap();
+        ApplyDarkTheme();
+    }
+
+    /// <summary>
+    /// Apply dark navy theme with custom-drawn controls.
+    /// </summary>
+    private void ApplyDarkTheme()
+    {
+        var bgDark = Color.FromArgb(10, 20, 40);
+        var bgPanel = Color.FromArgb(16, 30, 54);
+        var bgCard = Color.FromArgb(20, 36, 62);
+        var fgText = Color.FromArgb(220, 230, 248);
+        var fgDim = Color.FromArgb(140, 160, 190);
+        var accent = Color.FromArgb(56, 140, 240);
+        var accentBright = Color.FromArgb(80, 170, 255);
+        var inputBg = Color.FromArgb(8, 16, 32);
+        var borderColor = Color.FromArgb(35, 55, 90);
+        var dangerColor = Color.FromArgb(240, 70, 70);
+        var successColor = Color.FromArgb(30, 200, 120);
+        var warningColor = Color.FromArgb(240, 170, 40);
+
+        // Form
+        this.BackColor = bgDark;
+        this.ForeColor = fgText;
+        this.Padding = new Padding(6);
+
+        // ── GroupBoxes ──
+        void StyleGroup(GroupBox gb)
+        {
+            gb.BackColor = bgPanel;
+            gb.ForeColor = accentBright;
+            gb.Font = new Font("Microsoft YaHei", 9.5f, FontStyle.Bold);
+        }
+        StyleGroup(gbLogin);
+        StyleGroup(gbHints);
+        StyleGroup(gbScore);
+
+        // ── Labels ──
+        void StyleLabel(Label lbl, Color? fg = null)
+        {
+            lbl.BackColor = Color.Transparent;
+            lbl.ForeColor = fg ?? fgDim;
+            lbl.Font = new Font("Microsoft YaHei", 9f, FontStyle.Regular);
+        }
+        StyleLabel(lblIP);
+        StyleLabel(lblShipName);
+        StyleLabel(lblCaptain);
+        StyleLabel(lblCrew);
+        StyleLabel(lblHint1, fgDim);
+        StyleLabel(lblHint2, fgDim);
+        StyleLabel(lblHint3, fgDim);
+        StyleLabel(lblStatus, Color.FromArgb(120, 150, 190));
+        lblStatus.Font = new Font("Microsoft YaHei", 8.5f, FontStyle.Regular);
+
+        lblShipStatus.BackColor = Color.Transparent;
+        lblShipStatus.ForeColor = fgText;
+        lblShipStatus.Font = new Font("Microsoft YaHei", 9f, FontStyle.Regular);
+
+        // ── Buttons with hover effects ──
+        void StyleButton(Button btn, Color bg, Color border)
+        {
+            btn.FlatStyle = FlatStyle.Flat;
+            btn.FlatAppearance.BorderSize = 1;
+            btn.FlatAppearance.BorderColor = border;
+            btn.BackColor = bg;
+            btn.ForeColor = fgText;
+            btn.Font = new Font("Microsoft YaHei", 9f, FontStyle.Regular);
+            btn.Cursor = Cursors.Hand;
+            btn.MouseEnter += (s, e) =>
+            {
+                btn.BackColor = ControlPaint.Light(bg, 0.2f);
+                btn.FlatAppearance.BorderColor = ControlPaint.Light(border, 0.3f);
+            };
+            btn.MouseLeave += (s, e) =>
+            {
+                btn.BackColor = bg;
+                btn.FlatAppearance.BorderColor = border;
+            };
+        }
+        StyleButton(btnConnect, accent, accentBright);
+        StyleButton(btnDisconnect, bgCard, borderColor);
+        StyleButton(btnToggleMode, bgCard, borderColor);
+
+        // ── CheckBox ──
+        cbAutoBattle.BackColor = Color.Transparent;
+        cbAutoBattle.ForeColor = successColor;
+        cbAutoBattle.Font = new Font("Microsoft YaHei", 9f, FontStyle.Bold);
+
+        // ── TextBoxes ──
+        void StyleText(TextBox tb)
+        {
+            tb.BackColor = inputBg;
+            tb.ForeColor = fgText;
+            tb.BorderStyle = BorderStyle.FixedSingle;
+            tb.Font = new Font("Microsoft YaHei", 9f, FontStyle.Regular);
+        }
+        StyleText(txtIP);
+        StyleText(txtShipName);
+        StyleText(txtCaptain);
+        StyleText(txtCrew);
+
+        // ── Score ListBox: owner-draw with HP bar ──
+        lstScore.BackColor = bgCard;
+        lstScore.ForeColor = fgText;
+        lstScore.BorderStyle = BorderStyle.None;
+        lstScore.DrawMode = DrawMode.OwnerDrawFixed;
+        lstScore.ItemHeight = 28;
+        lstScore.DrawItem += (s, e) =>
+        {
+            if (e.Index < 0 || _state == null) return;
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            var sorted = _state.AllShips.OrderByDescending(s => s.Score).ToList();
+            if (e.Index >= sorted.Count) return;
+
+            var ship = sorted[e.Index];
+            bool isLocal = ship == _state.LocalShip;
+            var rowRect = e.Bounds;
+
+            // Row background
+            if (isLocal)
+                using (var localBg = new SolidBrush(Color.FromArgb(30, 56, 120, 240)))
+                    g.FillRectangle(localBg, rowRect);
+            else if (e.Index % 2 == 0)
+                using (var altBg = new SolidBrush(Color.FromArgb(12, 255, 255, 255)))
+                    g.FillRectangle(altBg, rowRect);
+
+            // Bottom separator
+            using var sepPen = new Pen(Color.FromArgb(16, 255, 255, 255));
+            g.DrawLine(sepPen, 0, rowRect.Bottom - 1, rowRect.Width, rowRect.Bottom - 1);
+
+            // Rank + Name
+            string label = isLocal ? $"★ {ship.ShipName}" : $"  {ship.ShipName}";
+            var nameFont = isLocal ? new Font("Microsoft YaHei", 9f, FontStyle.Bold)
+                                   : new Font("Microsoft YaHei", 9f, FontStyle.Regular);
+            var nameBrush = isLocal ? new SolidBrush(accentBright) : new SolidBrush(fgText);
+            g.DrawString(label, nameFont, nameBrush, 8, 5);
+            nameFont.Dispose(); nameBrush.Dispose();
+
+            // Score text
+            string scoreText = $"{ship.Score}杀";
+            var scoreFont = new Font("Consolas", 8.5f, FontStyle.Bold);
+            var scoreBrush = new SolidBrush(warningColor);
+            var scoreSize = g.MeasureString(scoreText, scoreFont);
+            float scoreX = rowRect.Width - scoreSize.Width - 10;
+            g.DrawString(scoreText, scoreFont, scoreBrush, scoreX, 7);
+            scoreFont.Dispose(); scoreBrush.Dispose();
+
+            // HP bar
+            int barX = (int)scoreX - 66;
+            int barY = 10;
+            int barW = 60;
+            int barH = 5;
+            using (var barBg = new SolidBrush(Color.FromArgb(40, 42, 50)))
+                g.FillRectangle(barBg, barX, barY, barW, barH);
+            float hpRatio = Math.Clamp(ship.HP / 3f, 0, 1);
+            var hpColor = hpRatio > 0.5f ? successColor : hpRatio > 0.25f ? warningColor : dangerColor;
+            using var hpBrush = new SolidBrush(hpColor);
+            g.FillRectangle(hpBrush, barX, barY, barW * hpRatio, barH);
+        };
+
+        // ── Status card: custom painted background ──
+        lblShipStatus.Paint += (s, e) =>
+        {
+            if (_state?.LocalShip == null) return;
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            var rect = lblShipStatus.ClientRectangle;
+
+            using var cardBrush = new SolidBrush(bgCard);
+            using var cardPath = RoundedRect(rect, 5);
+            g.FillPath(cardBrush, cardPath);
+            using var cardPen = new Pen(borderColor);
+            g.DrawPath(cardPen, cardPath);
+
+            var local = _state.LocalShip;
+            var font = new Font("Microsoft YaHei", 9f, FontStyle.Regular);
+
+            // HP bar
+            int barX = 10, barY = 8, barW = 80, barH = 7;
+            using (var barBg = new SolidBrush(Color.FromArgb(30, 32, 40)))
+                g.FillRectangle(barBg, barX, barY, barW, barH);
+            float hpRatio = Math.Clamp(local.HP / 3f, 0, 1);
+            var hpColor = hpRatio > 0.5f ? successColor : hpRatio > 0.25f ? warningColor : dangerColor;
+            using var hpBrush = new SolidBrush(hpColor);
+            g.FillRectangle(hpBrush, barX, barY, barW * hpRatio, barH);
+
+            // Info text
+            string cdText = _canFire ? "⚡就绪" : $"⏳{local.FireCooldownMs / 1000.0:F1}s";
+            string aiText = cbAutoBattle.Checked ? $"  🤖{_aiMode}" : "";
+            string info = $"📍({local.Px},{local.Py})  ❤️{local.HP}/3  💀{local.Score}{aiText}  {cdText}";
+            g.DrawString(info, font, new SolidBrush(fgText), barX + barW + 8, 5);
+
+            font.Dispose();
+        };
+    }
+
+    private static GraphicsPath RoundedRect(Rectangle rect, int radius)
+    {
+        var path = new GraphicsPath();
+        int d = radius * 2;
+        path.AddArc(rect.X, rect.Y, d, d, 180, 90);
+        path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
+        path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
+        path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
     }
 
     /// <summary>
@@ -333,8 +547,7 @@ public partial class Main : Form
         // Auto-battle AI
         if (cbAutoBattle.Checked && _state?.LocalShip != null)
         {
-            AutoMove();
-            AutoFire();
+            SmartTick();
         }
 
         if (_scoreDirty)
@@ -370,7 +583,8 @@ public partial class Main : Form
         }
         var s = _state.LocalShip;
         string cdText = _canFire ? "可开火" : $"冷却中({s.FireCooldownMs / 1000.0:F1}s)";
-        lblShipStatus.Text = $"位置:({s.Px},{s.Py})  HP:{s.HP}/3  击沉:{s.Score}  {cdText}";
+        string aiText = cbAutoBattle.Checked ? $" [AI:{_aiMode}]" : "";
+        lblShipStatus.Text = $"位置:({s.Px},{s.Py})  HP:{s.HP}/3  击沉:{s.Score}  {cdText}{aiText}";
     }
 
     private async void MoveTick(object? sender, EventArgs e)
@@ -477,94 +691,251 @@ public partial class Main : Form
     }
 
     /// <summary>
-    /// Find best target in range for auto-battle: prioritize low HP (1-hit kill),
-    /// then nearest distance, then any in-range.
+    /// Score a target: higher = better to attack. Weighted by HP (low=good),
+    /// distance (close=good), and persistence bonus for last target.
+    /// </summary>
+    private double ScoreTarget(Fleet ship)
+    {
+        if (_state?.LocalShip == null) return double.MinValue;
+        int dx = ship.Px - _state.LocalShip.Px;
+        int dy = ship.Py - _state.LocalShip.Py;
+        double dist = Math.Sqrt(dx * dx + dy * dy);
+
+        // Base: lower HP = much higher value
+        double score = (4.0 - ship.HP) * 100;
+
+        // Distance penalty (closer = better, but don't over-penalize)
+        score -= dist * 3;
+
+        // Persistence: bonus for last targeted ship (kill confirmation)
+        if (ship.ShipID == _lastTargetId)
+            score += 80;
+
+        // Prefer targets that are easier to reach (not blocked by edge)
+        // Slight bonus for targets nearer to map center (more traffic)
+        double centerDist = Math.Sqrt((ship.Px - 50) * (ship.Px - 50) + (ship.Py - 50) * (ship.Py - 50));
+        score -= Math.Max(0, centerDist - 40) * 0.5; // penalty only for edge-huggers
+
+        return score;
+    }
+
+    /// <summary>
+    /// Find best target within range 10 for firing.
     /// </summary>
     private Fleet? GetBestTargetInRange()
     {
         if (_state?.LocalShip == null) return null;
 
-        int rangeSq = 5 * 5;
-        Fleet? bestHp1 = null, bestHp2 = null, bestHp3 = null;
-        int bestDistHp1 = int.MaxValue, bestDistHp2 = int.MaxValue, bestDistHp3 = int.MaxValue;
+        Fleet? best = null;
+        double bestScore = double.MinValue;
+        int rangeSq = 10 * 10;
 
         foreach (var ship in _state.AllShips)
         {
             if (ship == _state.LocalShip) continue;
-
             int dx = ship.Px - _state.LocalShip.Px;
             int dy = ship.Py - _state.LocalShip.Py;
-            int distSq = dx * dx + dy * dy;
+            if (dx * dx + dy * dy > rangeSq) continue;
 
-            if (distSq > rangeSq) continue;
-
-            switch (ship.HP)
-            {
-                case 1:
-                    if (distSq < bestDistHp1) { bestDistHp1 = distSq; bestHp1 = ship; }
-                    break;
-                case 2:
-                    if (distSq < bestDistHp2) { bestDistHp2 = distSq; bestHp2 = ship; }
-                    break;
-                default: // 3 or unknown
-                    if (distSq < bestDistHp3) { bestDistHp3 = distSq; bestHp3 = ship; }
-                    break;
-            }
+            double score = ScoreTarget(ship);
+            if (score > bestScore) { bestScore = score; best = ship; }
         }
 
-        return bestHp1 ?? bestHp2 ?? bestHp3;
+        return best;
     }
 
     /// <summary>
-    /// Auto-move toward the nearest enemy (any distance, not just in-range).
-    /// Sets _moveDx, _moveDy which MoveTick picks up every 1s.
+    /// Find best target to chase (any distance). Returns null if none.
     /// </summary>
-    private void AutoMove()
+    private Fleet? GetBestChaseTarget()
     {
-        if (_state?.LocalShip == null) return;
+        if (_state?.LocalShip == null) return null;
 
-        // Find nearest enemy (any distance)
-        Fleet? nearest = null;
-        int minDistSq = int.MaxValue;
+        Fleet? best = null;
+        double bestScore = double.MinValue;
+
         foreach (var ship in _state.AllShips)
         {
             if (ship == _state.LocalShip) continue;
-            int dx = ship.Px - _state.LocalShip.Px;
-            int dy = ship.Py - _state.LocalShip.Py;
-            int distSq = dx * dx + dy * dy;
-            if (distSq < minDistSq) { minDistSq = distSq; nearest = ship; }
+            double score = ScoreTarget(ship);
+            if (score > bestScore) { bestScore = score; best = ship; }
         }
 
-        if (nearest == null) return;
+        return best;
+    }
 
-        int targetDx = nearest.Px - _state.LocalShip.Px;
-        int targetDy = nearest.Py - _state.LocalShip.Py;
-        int distSqTarget = targetDx * targetDx + targetDy * targetDy;
+    /// <summary>
+    /// Main AI tick: decide mode, move, and fire.
+    /// </summary>
+    private void SmartTick()
+    {
+        var local = _state?.LocalShip;
+        if (local == null) return;
 
-        // If within range (radius 5), stop moving to hold position and fire
-        if (distSqTarget <= 25)
+        // --- Detect stuck: if position unchanged for 3s, clear last target ---
+        if (local.Px == _aiLastPx && local.Py == _aiLastPy)
+            _aiStuckCounter++;
+        else
+        { _aiStuckCounter = 0; _aiLastPx = local.Px; _aiLastPy = local.Py; }
+        if (_aiStuckCounter > 6) // ~3s at 500ms tick
+        { _lastTargetId = null; _aiStuckCounter = 0; }
+
+        // --- Decide mode ---
+        _aiMode = local.HP <= 1 ? AiMode.Survivor : AiMode.Aggressive;
+
+        var fireTarget = GetBestTargetInRange();
+        var chaseTarget = GetBestChaseTarget();
+
+        if (chaseTarget == null)
+        {
+            _aiMode = AiMode.Patrol;
+        }
+
+        // --- Act ---
+        switch (_aiMode)
+        {
+            case AiMode.Aggressive:
+                AggressiveMove(chaseTarget, fireTarget);
+                break;
+            case AiMode.Survivor:
+                SurvivorMove(chaseTarget, fireTarget);
+                break;
+            case AiMode.Patrol:
+                PatrolMove();
+                break;
+        }
+
+        // --- Fire at best target in range ---
+        if (fireTarget != null && _canFire && !_disconnecting && _net != null)
+        {
+            _lastTargetId = fireTarget.ShipID;
+            _ = FireAt(fireTarget);
+        }
+    }
+
+    /// <summary>
+    /// Aggressive: close in to optimal range (5-8), chase best target.
+    /// </summary>
+    private void AggressiveMove(Fleet? chase, Fleet? inRange)
+    {
+        var local = _state!.LocalShip!;
+
+        if (chase == null) { PatrolMove(); return; }
+
+        int dx = chase.Px - local.Px;
+        int dy = chase.Py - local.Py;
+        int distSq = dx * dx + dy * dy;
+
+        // Already at good firing distance: slight strafe to avoid being too static
+        if (distSq <= 100)
+        {
+            // If target is very close (< 4), back off slightly
+            if (distSq < 16)
+            {
+                _moveDx = -Math.Sign(dx);
+                _moveDy = -Math.Sign(dy);
+            }
+            else
+            {
+                // Strafe: orbit slightly around target while staying in range
+                _moveDx = distSq > 36 ? Math.Sign(dx) : -Math.Sign(dy);
+                _moveDy = distSq > 36 ? Math.Sign(dy) : Math.Sign(dx);
+            }
+            return;
+        }
+
+        // Move toward chase target
+        _moveDx = Math.Sign(dx);
+        _moveDy = Math.Sign(dy);
+
+        // Edge avoidance bias
+        ApplyEdgeBias();
+    }
+
+    /// <summary>
+    /// Survivor mode: only attack HP=1 targets, avoid everyone else.
+    /// </summary>
+    private void SurvivorMove(Fleet? chase, Fleet? inRange)
+    {
+        var local = _state!.LocalShip!;
+
+        // If there's a killable HP=1 target in range, stay and fight
+        if (inRange != null && inRange.HP == 1)
         {
             _moveDx = 0;
             _moveDy = 0;
             return;
         }
 
-        // Move toward target
-        _moveDx = Math.Sign(targetDx);
-        _moveDy = Math.Sign(targetDy);
+        if (chase != null && chase.HP == 1)
+        {
+            // Chase HP=1 target
+            int dx = chase.Px - local.Px;
+            int dy = chase.Py - local.Py;
+            _moveDx = Math.Sign(dx);
+            _moveDy = Math.Sign(dy);
+            return;
+        }
+
+        // Flee from nearest threat: move away from nearest enemy
+        Fleet? threat = null;
+        int minDistSq = int.MaxValue;
+        foreach (var ship in _state.AllShips)
+        {
+            if (ship == local) continue;
+            int dx = ship.Px - local.Px;
+            int dy = ship.Py - local.Py;
+            int d2 = dx * dx + dy * dy;
+            if (d2 < minDistSq) { minDistSq = d2; threat = ship; }
+        }
+
+        if (threat != null)
+        {
+            _moveDx = -Math.Sign(threat.Px - local.Px);
+            _moveDy = -Math.Sign(threat.Py - local.Py);
+        }
+
+        ApplyEdgeBias();
+
+        // Move toward center if no threats nearby
+        if (threat == null || minDistSq > 400) // 20+ units away
+            PatrolMove();
     }
 
     /// <summary>
-    /// Auto-fire at the best target in range if cooldown is ready.
+    /// Patrol: move toward map center (50,50) where action is.
     /// </summary>
-    private async void AutoFire()
+    private void PatrolMove()
     {
-        if (_disconnecting || _net == null || !_canFire) return;
+        var local = _state!.LocalShip!;
+        int dx = 50 - local.Px;
+        int dy = 50 - local.Py;
 
-        var target = GetBestTargetInRange();
-        if (target == null) return;
+        if (Math.Abs(dx) <= 3 && Math.Abs(dy) <= 3)
+        {
+            // Near center: circle slowly
+            _moveDx = (_aiStuckCounter / 3) % 2 == 0 ? 1 : -1;
+            _moveDy = 0;
+        }
+        else
+        {
+            _moveDx = Math.Sign(dx);
+            _moveDy = Math.Sign(dy);
+        }
+    }
 
-        await FireAt(target);
+    /// <summary>
+    /// Bias movement away from map edges to avoid getting trapped.
+    /// </summary>
+    private void ApplyEdgeBias()
+    {
+        var local = _state!.LocalShip!;
+        const int edgeMargin = 5;
+
+        if (local.Px <= edgeMargin) _moveDx = Math.Max(_moveDx, 1);
+        if (local.Px >= 100 - edgeMargin) _moveDx = Math.Min(_moveDx, -1);
+        if (local.Py <= edgeMargin) _moveDy = Math.Max(_moveDy, 1);
+        if (local.Py >= 100 - edgeMargin) _moveDy = Math.Min(_moveDy, -1);
     }
 
     private async void ManualFire()
@@ -745,7 +1116,7 @@ public partial class Main : Form
         int dx = target.Px - _state.LocalShip.Px;
         int dy = target.Py - _state.LocalShip.Py;
 
-        // Clamp to range [-5,5] within circle radius 5
+        // Clamp to range [-10,10] within circle radius 10
         if (dx * dx + dy * dy > 100)
         {
             double dist = Math.Sqrt(dx * dx + dy * dy);
@@ -1067,5 +1438,10 @@ public partial class Main : Form
         {
             bitmap?.Dispose();
         }
+    }
+
+    private void pbBattlefield_Click(object sender, EventArgs e)
+    {
+
     }
 }

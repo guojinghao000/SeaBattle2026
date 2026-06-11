@@ -85,10 +85,23 @@ public class GameState
     private void ProcessData(string message)
     {
         var parts = message.Split(',', StringSplitOptions.RemoveEmptyEntries);
-        // Data,shipID,px,py,fx,fy,HP,score,fireCooldownMs,...
-        // Groups of 8
+        // Data,shipID,px,py,fx,fy,HP,score[,fireCooldownMs],...
+        // Old server: 7 fields per ship (no FireCooldownMs)
+        // New server: 8 fields per ship (includes FireCooldownMs)
 
-        for (int i = 1; i + 7 < parts.Length; i += 8)
+        int dataCount = parts.Length - 1; // exclude "Data," header
+        if (dataCount <= 0) return;
+
+        // Auto-detect fields per ship: check divisibility
+        int fieldsPerShip;
+        if (dataCount % 7 == 0)
+            fieldsPerShip = 7; // old server protocol
+        else if (dataCount % 8 == 0)
+            fieldsPerShip = 8; // new server protocol
+        else
+            return; // unknown format, skip
+
+        for (int i = 1; i + fieldsPerShip - 1 < parts.Length; i += fieldsPerShip)
         {
             string id = parts[i];
 
@@ -104,7 +117,11 @@ public class GameState
             if (int.TryParse(parts[i + 4], out int fy)) ship.Fy = fy;
             if (int.TryParse(parts[i + 5], out int hp)) ship.HP = hp;
             if (int.TryParse(parts[i + 6], out int score)) ship.Score = score;
-            if (int.TryParse(parts[i + 7], out int cd)) ship.FireCooldownMs = cd;
+
+            if (fieldsPerShip >= 8 && int.TryParse(parts[i + 7], out int cd))
+                ship.FireCooldownMs = cd;
+            else
+                ship.FireCooldownMs = 0;
         }
 
         StateChanged?.Invoke();

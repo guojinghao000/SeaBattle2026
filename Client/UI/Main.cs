@@ -16,6 +16,8 @@ public partial class Main : Form
     private bool _canFire = true;
     private bool _showEnemyCooldown = true;
     private bool _loggedIn;
+    private bool _disconnecting;
+    private bool _scoreDirty;
     private readonly HashSet<Keys> _heldKeys = new();
 
     // Cached GDI objects to avoid per-frame allocation (prevents AccessViolation)
@@ -199,6 +201,7 @@ public partial class Main : Form
             MessageBox.Show($"连接失败: {ex.Message}");
             lblStatus.Text = "连接失败";
             btnConnect.Enabled = true;
+            _disconnecting = false;
             _net?.Dispose();
             _net = null;
         }
@@ -219,9 +222,14 @@ public partial class Main : Form
     {
         if (InvokeRequired)
         {
-            BeginInvoke(OnConnectionLost);
+            // Only post once to avoid multiple message boxes
+            if (!_disconnecting)
+                BeginInvoke(OnConnectionLost);
             return;
         }
+
+        if (_disconnecting) return;
+        _disconnecting = true;
 
         if (_net != null)
             _net.ConnectionLost -= OnConnectionLost;
@@ -233,24 +241,28 @@ public partial class Main : Form
 
     private void Main_FormClosing(object sender, FormClosingEventArgs e)
     {
+        _disconnecting = true;
+        _gameTimer.Stop();
+        _moveTimer.Stop();
+        _fireTimer.Stop();
+
         if (_net != null && _loggedIn)
         {
             try
             {
-                // 同步发送 Logout 确保服务器收到
-                _net.SendCommandAsync("Logout").Wait(TimeSpan.FromSeconds(1));
+                // Fire-and-forget: don't block UI thread during close
+                _ = _net.SendCommandAsync("Logout");
             }
             catch { }
         }
-        _gameTimer.Stop();
-        _moveTimer.Stop();
-        _fireTimer.Stop();
         _net?.Dispose();
         _net = null;
     }
 
     private async Task Disconnect()
     {
+        _disconnecting = true;
+
         if (_net != null && _loggedIn)
             await _net.SendCommandAsync("Logout");
 
@@ -276,16 +288,18 @@ public partial class Main : Form
         lblStatus.Text = "未连接";
         lblShipStatus.Text = "";
         lstScore.Items.Clear();
+
+        _disconnecting = false;
     }
 
     private void OnStateChanged()
     {
-        RefreshScoreList();
+        _scoreDirty = true;
     }
 
     private void RefreshScoreList()
     {
-        if (_state == null) return;
+        if (_state == null || lstScore.IsDisposed) return;
         var sorted = _state.AllShips
             .OrderByDescending(s => s.Score)
             .ToList();
@@ -312,9 +326,22 @@ public partial class Main : Form
 
     private void GameTick(object? sender, EventArgs e)
     {
+        if (_disconnecting) return;
+
         ProcessMessages();
-        RenderBattlefield();
-        RenderMinimap();
+
+        if (_scoreDirty)
+        {
+            _scoreDirty = false;
+            RefreshScoreList();
+        }
+
+        try { RenderBattlefield(); }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Main] RenderBattlefield error: {ex.Message}"); }
+
+        try { RenderMinimap(); }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Main] RenderMinimap error: {ex.Message}"); }
+
         UpdateShipStatus();
     }
 
@@ -341,7 +368,7 @@ public partial class Main : Form
 
     private async void MoveTick(object? sender, EventArgs e)
     {
-        if (_net == null || !_canMove || (_moveDx == 0 && _moveDy == 0)) return;
+        if (_disconnecting || _net == null || !_canMove || (_moveDx == 0 && _moveDy == 0)) return;
 
         _canMove = false;
         await _net.SendCommandAsync($"Move,{_moveDx},{_moveDy}");
@@ -437,7 +464,7 @@ public partial class Main : Form
 
     private async void ManualFire()
     {
-        if (_net == null || !_canFire || _state?.LocalShip == null) return;
+        if (_disconnecting || _net == null || !_canFire || _state?.LocalShip == null) return;
 
         var target = GetNearestTargetInRange();
         if (target == null) return;
@@ -447,7 +474,7 @@ public partial class Main : Form
 
     private async void PbBattlefield_MouseClick(object? sender, MouseEventArgs e)
     {
-        if (_net == null || !_canFire || _state?.LocalShip == null) return;
+        if (_disconnecting || _net == null || !_canFire || _state?.LocalShip == null) return;
 
         // Convert screen pixel to grid coordinates using viewport
         int clickGridX = (int)(e.X / _cellSize + _viewportMinX);
@@ -569,7 +596,7 @@ public partial class Main : Form
         // Placeholder: clicking the minimap could later be used to jump
         // the main view to that location if zoom/pan is implemented.
         // For now, treat it the same as clicking the main battlefield.
-        if (_net == null || !_canFire || _state?.LocalShip == null) return;
+        if (_disconnecting || _net == null || !_canFire || _state?.LocalShip == null) return;
 
         int size = pbMinimap.Width;
         float scale = 100f / size;
@@ -608,7 +635,7 @@ public partial class Main : Form
 
     private async Task FireAt(Fleet target)
     {
-        if (_net == null || _state?.LocalShip == null) return;
+        if (_disconnecting || _net == null || _state?.LocalShip == null) return;
 
         int dx = target.Px - _state.LocalShip.Px;
         int dy = target.Py - _state.LocalShip.Py;

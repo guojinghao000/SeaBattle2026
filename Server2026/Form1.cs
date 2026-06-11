@@ -459,7 +459,7 @@ namespace Server2026
 
         public (int limitedX, int limitedY) ClampToCircle(int x, int y)
         {
-            const float radius = 5f;
+            const float radius = 10f;
 
             float squaredDistance = x * x + y * y;
 

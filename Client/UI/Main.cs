@@ -442,7 +442,7 @@ public partial class Main : Form
 
         Fleet? nearest = null;
         int minDistSq = int.MaxValue;
-        int rangeSq = 5 * 5;
+        int rangeSq = 10 * 10;
 
         foreach (var ship in _state.AllShips)
         {
@@ -483,7 +483,7 @@ public partial class Main : Form
         // Find enemy closest to click point within range
         Fleet? bestTarget = null;
         double bestDist = double.MaxValue;
-        int rangeSq = 5 * 5;
+        int rangeSq = 10 * 10;
 
         foreach (var ship in _state.AllShips)
         {
@@ -605,7 +605,7 @@ public partial class Main : Form
 
         Fleet? bestTarget = null;
         double bestDist = double.MaxValue;
-        int rangeSq = 5 * 5;
+        int rangeSq = 10 * 10;
 
         foreach (var ship in _state.AllShips)
         {
@@ -641,10 +641,10 @@ public partial class Main : Form
         int dy = target.Py - _state.LocalShip.Py;
 
         // Clamp to range [-5,5] within circle radius 5
-        if (dx * dx + dy * dy > 25)
+        if (dx * dx + dy * dy > 100)
         {
             double dist = Math.Sqrt(dx * dx + dy * dy);
-            double scale = 5.0 / dist;
+            double scale = 10.0 / dist;
             dx = (int)(dx * scale);
             dy = (int)(dy * scale);
         }
@@ -682,7 +682,7 @@ public partial class Main : Form
             var inRange = new HashSet<Fleet>();
             if (_state.LocalShip != null)
             {
-                int rangeSq = 5 * 5;
+                int rangeSq = 10 * 10;
                 foreach (var ship in _state.AllShips)
                 {
                     if (ship == _state.LocalShip) continue;
@@ -719,7 +719,7 @@ public partial class Main : Form
             {
                 float cx = _state.LocalShip.Px * scale;
                 float cy = _state.LocalShip.Py * scale;
-                float rangePx = 5 * scale;
+                float rangePx = 10 * scale;
                 g.DrawEllipse(_minimapRangePen, cx - rangePx, cy - rangePx, rangePx * 2, rangePx * 2);
             }
 
@@ -855,7 +855,7 @@ public partial class Main : Form
             {
                 float cx = ToScreenX(_state.LocalShip.Px);
                 float cy = ToScreenY(_state.LocalShip.Py);
-                float rangePx = 5 * _cellSize;
+                float rangePx = 10 * _cellSize;
                 g.DrawEllipse(_rangePen, cx - rangePx, cy - rangePx, rangePx * 2, rangePx * 2);
             }
 
@@ -875,7 +875,7 @@ public partial class Main : Form
             var allInRange = new HashSet<Fleet>();
             if (_state.LocalShip != null)
             {
-                int rangeSq = 5 * 5;
+                int rangeSq = 10 * 10;
                 foreach (var ship in _state.AllShips)
                 {
                     if (ship == _state.LocalShip) continue;

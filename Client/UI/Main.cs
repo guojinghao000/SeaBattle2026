@@ -8,7 +8,7 @@ public partial class Main : Form
 {
     private NetworkService? _net;
     private GameState? _state;
-    private readonly System.Windows.Forms.Timer _gameTimer = new() { Interval = 100 };
+    private readonly System.Windows.Forms.Timer _gameTimer = new() { Interval = 500 };
     private readonly System.Windows.Forms.Timer _moveTimer = new() { Interval = 1000 };
     private readonly System.Windows.Forms.Timer _fireTimer = new() { Interval = 2000 };
     private int _moveDx, _moveDy;

@@ -484,7 +484,7 @@ public partial class Main : Form
     {
         if (_state?.LocalShip == null) return null;
 
-        int rangeSq = 5 * 5;
+        int rangeSq = 10 * 10;
         Fleet? bestHp1 = null, bestHp2 = null, bestHp3 = null;
         int bestDistHp1 = int.MaxValue, bestDistHp2 = int.MaxValue, bestDistHp3 = int.MaxValue;
 
@@ -542,7 +542,7 @@ public partial class Main : Form
         int distSqTarget = targetDx * targetDx + targetDy * targetDy;
 
         // If within range (radius 5), stop moving to hold position and fire
-        if (distSqTarget <= 25)
+        if (distSqTarget <= 100)
         {
             _moveDx = 0;
             _moveDy = 0;

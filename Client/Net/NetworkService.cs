@@ -88,10 +88,36 @@ public class NetworkService : IDisposable
 
     public async Task SendBroadcastAsync(string message = "Discovery")
     {
-        if (_udpClient == null) return;
-        byte[] data = Encoding.UTF8.GetBytes(message);
-        await _udpClient.SendAsync(data, data.Length,
-            new IPEndPoint(IPAddress.Broadcast, _udpPort));
+        try
+        {
+            byte[] data = Encoding.UTF8.GetBytes(message);
+            if (_udpClient != null)
+            {
+                await _udpClient.SendAsync(data, data.Length,
+                    new IPEndPoint(IPAddress.Broadcast, _udpPort));
+            }
+            else
+            {
+                using var client = new UdpClient();
+                client.EnableBroadcast = true;
+                await client.SendAsync(data, data.Length,
+                    new IPEndPoint(IPAddress.Broadcast, _udpPort));
+            }
+        }
+        catch { }
+    }
+
+    public static async Task BroadcastOnceAsync(string message = "Discovery")
+    {
+        try
+        {
+            using var client = new UdpClient();
+            client.EnableBroadcast = true;
+            byte[] data = Encoding.UTF8.GetBytes(message);
+            await client.SendAsync(data, data.Length,
+                new IPEndPoint(IPAddress.Broadcast, 18001));
+        }
+        catch { }
     }
 
     private void ListenTcp(CancellationToken token)
@@ -110,10 +136,10 @@ public class NetworkService : IDisposable
                 }
                 ReceivedMessages.Enqueue(line);
             }
-            catch when (!token.IsCancellationRequested)
-            {
-                Thread.Sleep(100);
-            }
+            catch (IOException)
+            { break; }
+            catch (ObjectDisposedException)
+            { break; }
         }
     }
 
@@ -130,10 +156,10 @@ public class NetworkService : IDisposable
                 string message = Encoding.UTF8.GetString(data);
                 ReceivedMessages.Enqueue(message);
             }
-            catch (SocketException) when (!token.IsCancellationRequested)
-            {
-                Thread.Sleep(100);
-            }
+            catch (SocketException)
+            { break; }
+            catch (ObjectDisposedException)
+            { break; }
         }
     }
 

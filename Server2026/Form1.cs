@@ -10,6 +10,8 @@ namespace Server2026
         public int tcpPort = 18000;
         public int udpPort = 18001;
         public TcpListener? tcpListener;
+        private UdpClient? _udpClient;
+        private CancellationTokenSource? _udpCts;
         bool isListening = false;
         public List<Ship> shipList = new();  // 在线的用户
         private readonly object _shipLock = new();
@@ -184,6 +186,8 @@ namespace Server2026
                 Thread listenThread = new(ListenClientConnect);
                 listenThread.Start();
 
+                StartUdpListener();
+
                 lock (_shipLock)
                 {
                     shipList.RemoveAll(s => s.IsBot);
@@ -313,17 +317,65 @@ namespace Server2026
                 {
                     AddMessage($"解析异常 {ship.shipName}:{receiveString}");
                 }
+        }
+        ship.moveTimer.Stop();
+        ship.fireTimer.Stop();
+        ship.SWriter?.Close();
+        ship.SReader?.Close();
+        ship.Client?.Close();
+        RemoveShip(ship);
+        pictureBox1.Invalidate();
+        List<Ship> remaining;
+        lock (_shipLock) { remaining = shipList.ToList(); }
+        SendToAll(remaining, GetAllShipName());
+    }
+
+    private void StartUdpListener()
+        {
+            try
+            {
+                _udpClient = new UdpClient();
+                _udpClient.Client.SetSocketOption(SocketOptionLevel.Socket,
+                    SocketOptionName.ReuseAddress, true);
+                _udpClient.ExclusiveAddressUse = false;
+                _udpClient.Client.Bind(new IPEndPoint(IPAddress.Any, udpPort));
+                _udpClient.EnableBroadcast = true;
+                _udpCts = new CancellationTokenSource();
+                Thread udpThread = new(() => ListenUdp(_udpCts.Token));
+                udpThread.Start();
+                AddMessage($"UDP广播监听已启动，端口:{udpPort}");
             }
-            ship.moveTimer.Stop();
-            ship.fireTimer.Stop();
-            ship.SWriter?.Close();
-            ship.SReader?.Close();
-            ship.Client?.Close();
-            RemoveShip(ship);
-            pictureBox1.Invalidate();
-            List<Ship> remaining;
-            lock (_shipLock) { remaining = shipList.ToList(); }
-            SendToAll(remaining, GetAllShipName());
+            catch (Exception ex)
+            {
+                AddMessage($"UDP监听启动失败：{ex.Message}");
+            }
+        }
+
+        private void ListenUdp(CancellationToken token)
+        {
+            if (_udpClient == null) return;
+
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    IPEndPoint remoteEP = new(IPAddress.Any, 0);
+                    byte[] data = _udpClient.Receive(ref remoteEP);
+                    string message = Encoding.UTF8.GetString(data);
+                    AddMessage($"UDP广播[{remoteEP}]: {message}");
+
+                    if (message == "Discovery" && serverIP != null)
+                    {
+                        byte[] response = Encoding.UTF8.GetBytes(
+                            $"Server,{serverIP},{tcpPort}");
+                        _udpClient.Send(response, response.Length, remoteEP);
+                    }
+                }
+                catch (SocketException) when (!token.IsCancellationRequested)
+                { Thread.Sleep(100); }
+                catch (ObjectDisposedException)
+                { break; }
+            }
         }
 
         public string GetAllShipName()
@@ -353,6 +405,8 @@ namespace Server2026
             StartToolStripMenuItem.Enabled = true;
             StopToolStripMenuItem.Enabled = false;
             isListening = false;
+            _udpCts?.Cancel();
+            _udpClient?.Close();
             tcpListener?.Stop();
 
             List<Ship> snapshot;
@@ -383,6 +437,8 @@ namespace Server2026
         {
             updateTimer.Stop();
             isListening = false;
+            _udpCts?.Cancel();
+            _udpClient?.Close();
             tcpListener?.Stop();
 
             List<Ship> snapshot;

@@ -16,7 +16,10 @@
             pbBattlefield = new PictureBox();
             gbLogin = new GroupBox();
             btnConnect = new Button();
+            btnBroadcast = new Button();
             txtCrew = new TextBox();
+            txtBroadcastMsg = new TextBox();
+            lblBroadcast = new Label();
             lblCrew = new Label();
             txtCaptain = new TextBox();
             lblCaptain = new Label();
@@ -61,6 +64,8 @@
             gbLogin.Controls.Add(btnConnect);
             gbLogin.Controls.Add(btnBroadcast);
             gbLogin.Controls.Add(txtCrew);
+            gbLogin.Controls.Add(txtBroadcastMsg);
+            gbLogin.Controls.Add(lblBroadcast);
             gbLogin.Controls.Add(lblCrew);
             gbLogin.Controls.Add(txtCaptain);
             gbLogin.Controls.Add(lblCaptain);
@@ -72,14 +77,14 @@
             gbLogin.Margin = new Padding(2, 3, 2, 3);
             gbLogin.Name = "gbLogin";
             gbLogin.Padding = new Padding(2, 3, 2, 3);
-            gbLogin.Size = new Size(311, 196);
+            gbLogin.Size = new Size(311, 222);
             gbLogin.TabIndex = 1;
             gbLogin.TabStop = false;
             gbLogin.Text = "登录";
             // 
             // btnConnect
             // 
-            btnConnect.Location = new Point(117, 161);
+            btnConnect.Location = new Point(6, 191);
             btnConnect.Margin = new Padding(2, 3, 2, 3);
             btnConnect.Name = "btnConnect";
             btnConnect.Size = new Size(78, 26);
@@ -90,30 +95,49 @@
             // 
             // btnBroadcast
             // 
-            btnBroadcast = new Button();
-            btnBroadcast.Location = new Point(200, 161);
+            btnBroadcast.Location = new Point(223, 191);
             btnBroadcast.Margin = new Padding(2, 3, 2, 3);
             btnBroadcast.Name = "btnBroadcast";
-            btnBroadcast.Size = new Size(95, 26);
+            btnBroadcast.Size = new Size(78, 26);
             btnBroadcast.TabIndex = 9;
             btnBroadcast.TabStop = false;
-            btnBroadcast.Text = "发送广播";
+            btnBroadcast.Text = "广播";
             btnBroadcast.UseVisualStyleBackColor = true;
             btnBroadcast.Click += BtnBroadcast_Click;
             // 
             // txtCrew
             // 
-            txtCrew.Location = new Point(61, 132);
+            txtCrew.Location = new Point(61, 131);
             txtCrew.Margin = new Padding(2, 3, 2, 3);
             txtCrew.Name = "txtCrew";
             txtCrew.Size = new Size(238, 23);
             txtCrew.TabIndex = 7;
             txtCrew.Text = "水手1,水手2";
             // 
+            // txtBroadcastMsg
+            // 
+            txtBroadcastMsg.Location = new Point(61, 161);
+            txtBroadcastMsg.Margin = new Padding(2, 3, 2, 3);
+            txtBroadcastMsg.Name = "txtBroadcastMsg";
+            txtBroadcastMsg.Size = new Size(238, 23);
+            txtBroadcastMsg.TabIndex = 8;
+            txtBroadcastMsg.Text = "Discovery";
+            // 
+            // lblBroadcast
+            // 
+            // 
+            lblBroadcast.AutoSize = true;
+            lblBroadcast.Location = new Point(6, 163);
+            lblBroadcast.Margin = new Padding(2, 0, 2, 0);
+            lblBroadcast.Name = "lblBroadcast";
+            lblBroadcast.Size = new Size(56, 17);
+            lblBroadcast.TabIndex = 9;
+            lblBroadcast.Text = "广播消息";
+            // 
             // lblCrew
             // 
             lblCrew.AutoSize = true;
-            lblCrew.Location = new Point(6, 134);
+            lblCrew.Location = new Point(6, 133);
             lblCrew.Margin = new Padding(2, 0, 2, 0);
             lblCrew.Name = "lblCrew";
             lblCrew.Size = new Size(56, 17);
@@ -122,7 +146,7 @@
             // 
             // txtCaptain
             // 
-            txtCaptain.Location = new Point(61, 102);
+            txtCaptain.Location = new Point(61, 101);
             txtCaptain.Margin = new Padding(2, 3, 2, 3);
             txtCaptain.Name = "txtCaptain";
             txtCaptain.Size = new Size(238, 23);
@@ -132,7 +156,7 @@
             // lblCaptain
             // 
             lblCaptain.AutoSize = true;
-            lblCaptain.Location = new Point(6, 105);
+            lblCaptain.Location = new Point(6, 103);
             lblCaptain.Margin = new Padding(2, 0, 2, 0);
             lblCaptain.Name = "lblCaptain";
             lblCaptain.Size = new Size(56, 17);
@@ -141,7 +165,7 @@
             // 
             // txtShipName
             // 
-            txtShipName.Location = new Point(61, 72);
+            txtShipName.Location = new Point(61, 71);
             txtShipName.Margin = new Padding(2, 3, 2, 3);
             txtShipName.Name = "txtShipName";
             txtShipName.Size = new Size(238, 23);
@@ -151,7 +175,7 @@
             // lblShipName
             // 
             lblShipName.AutoSize = true;
-            lblShipName.Location = new Point(6, 75);
+            lblShipName.Location = new Point(6, 73);
             lblShipName.Margin = new Padding(2, 0, 2, 0);
             lblShipName.Name = "lblShipName";
             lblShipName.Size = new Size(56, 17);
@@ -183,7 +207,7 @@
             gbHints.Controls.Add(lblHint1);
             gbHints.Controls.Add(lblHint2);
             gbHints.Controls.Add(lblHint3);
-            gbHints.Location = new Point(485, 211);
+            gbHints.Location = new Point(485, 237);
             gbHints.Margin = new Padding(2, 3, 2, 3);
             gbHints.Name = "gbHints";
             gbHints.Padding = new Padding(2, 3, 2, 3);
@@ -226,11 +250,11 @@
             // 
             gbScore.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Right;
             gbScore.Controls.Add(lstScore);
-            gbScore.Location = new Point(485, 282);
+            gbScore.Location = new Point(485, 308);
             gbScore.Margin = new Padding(2, 3, 2, 3);
             gbScore.Name = "gbScore";
             gbScore.Padding = new Padding(2, 3, 2, 3);
-            gbScore.Size = new Size(311, 170);
+            gbScore.Size = new Size(311, 144);
             gbScore.TabIndex = 2;
             gbScore.TabStop = false;
             gbScore.Text = "击沉数排名";
@@ -363,6 +387,8 @@
         private Button btnConnect;
         private Button btnBroadcast;
         private TextBox txtCrew;
+        private TextBox txtBroadcastMsg;
+        private Label lblBroadcast;
         private Label lblCrew;
         private TextBox txtCaptain;
         private Label lblCaptain;

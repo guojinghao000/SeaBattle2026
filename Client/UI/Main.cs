@@ -191,6 +191,7 @@ public partial class Main : Form
         StyleLabel(lblShipName);
         StyleLabel(lblCaptain);
         StyleLabel(lblCrew);
+        StyleLabel(lblBroadcast);
         StyleLabel(lblHint1, fgDim);
         StyleLabel(lblHint2, fgDim);
         StyleLabel(lblHint3, fgDim);
@@ -223,6 +224,7 @@ public partial class Main : Form
             };
         }
         StyleButton(btnConnect, accent, accentBright);
+        StyleButton(btnBroadcast, accent, accentBright);
         StyleButton(btnDisconnect, bgCard, borderColor);
         StyleButton(btnToggleMode, bgCard, borderColor);
 
@@ -243,6 +245,7 @@ public partial class Main : Form
         StyleText(txtShipName);
         StyleText(txtCaptain);
         StyleText(txtCrew);
+        StyleText(txtBroadcastMsg);
 
         // ── Score ListBox: owner-draw with HP bar ──
         lstScore.BackColor = bgCard;
@@ -423,7 +426,11 @@ public partial class Main : Form
             await _net.SendCommandAsync(loginMsg);
             _loggedIn = true;
 
-            gbLogin.Enabled = false;
+            txtIP.Enabled = false;
+            txtShipName.Enabled = false;
+            txtCaptain.Enabled = false;
+            txtCrew.Enabled = false;
+            btnConnect.Enabled = false;
             btnDisconnect.Enabled = true;
             lblStatus.Text = "已连接";
             _net.ConnectionLost += OnConnectionLost;
@@ -441,10 +448,14 @@ public partial class Main : Form
 
     private async void BtnBroadcast_Click(object? sender, EventArgs e)
     {
-        if (_net == null) return;
         try
         {
-            await _net.SendBroadcastAsync("Discovery");
+            string msg = txtBroadcastMsg.Text.Trim();
+            if (string.IsNullOrEmpty(msg)) msg = "Discovery";
+            if (_net != null)
+                await _net.SendBroadcastAsync(msg);
+            else
+                await NetworkService.BroadcastOnceAsync(msg);
             lblStatus.Text = "已发送广播";
         }
         catch
@@ -528,7 +539,10 @@ public partial class Main : Form
         _moveDy = 0;
         _heldKeys.Clear();
 
-        gbLogin.Enabled = true;
+        txtIP.Enabled = true;
+        txtShipName.Enabled = true;
+        txtCaptain.Enabled = true;
+        txtCrew.Enabled = true;
         btnConnect.Enabled = true;
         btnDisconnect.Enabled = false;
         lblStatus.Text = "未连接";

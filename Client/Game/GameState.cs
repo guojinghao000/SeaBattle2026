@@ -5,8 +5,10 @@ namespace Client.Game;
 public class GameState
 {
     private readonly ConcurrentDictionary<string, Fleet> _ships = new();
+    private readonly List<Fleet> _sortedShips = new();
 
     public ICollection<Fleet> AllShips => _ships.Values;
+    public IReadOnlyList<Fleet> SortedByScore => _sortedShips;
 
     public Fleet? LocalShip { get; private set; }
 
@@ -84,6 +86,7 @@ public class GameState
                 s.ShipName == LocalShipName && s.CaptainName == LocalCaptainName);
         }
 
+        RebuildSortedList();
         StateChanged?.Invoke();
     }
 
@@ -135,6 +138,16 @@ public class GameState
                 ship.FireCooldownMs = 0;
         }
 
+        RebuildSortedList();
         StateChanged?.Invoke();
+    }
+
+    private void RebuildSortedList()
+    {
+        lock (_sortedShips)
+        {
+            _sortedShips.Clear();
+            _sortedShips.AddRange(_ships.Values.OrderByDescending(s => s.Score));
+        }
     }
 }

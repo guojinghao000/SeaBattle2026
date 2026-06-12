@@ -253,12 +253,12 @@ public partial class Main : Form
             if (e.Index < 0 || _state == null) return;
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            var sorted = _state.AllShips.OrderByDescending(s => s.Score).ToList();
+            var sorted = _state.SortedByScore;
             if (e.Index >= sorted.Count) return;
-
             var ship = sorted[e.Index];
             bool isLocal = ship == _state.LocalShip;
             var rowRect = e.Bounds;
+            int y = rowRect.Y;
 
             // Row background
             if (isLocal)
@@ -273,25 +273,39 @@ public partial class Main : Form
             g.DrawLine(sepPen, 0, rowRect.Bottom - 1, rowRect.Width, rowRect.Bottom - 1);
 
             // Rank + Name
-            string label = isLocal ? $"★ {ship.ShipName}" : $"  {ship.ShipName}";
+            string star = isLocal ? "★" : " ";
+            string label = $"#{e.Index + 1} {star} {ship.ShipName}";
             var nameFont = isLocal ? new Font("Microsoft YaHei", 9f, FontStyle.Bold)
                                    : new Font("Microsoft YaHei", 9f, FontStyle.Regular);
             var nameBrush = isLocal ? new SolidBrush(accentBright) : new SolidBrush(fgText);
-            g.DrawString(label, nameFont, nameBrush, 8, 5);
+            g.DrawString(label, nameFont, nameBrush, 8, y + 5);
             nameFont.Dispose(); nameBrush.Dispose();
 
-            // Score text
+            // Score text (right-aligned)
             string scoreText = $"{ship.Score}杀";
             var scoreFont = new Font("Consolas", 8.5f, FontStyle.Bold);
             var scoreBrush = new SolidBrush(warningColor);
             var scoreSize = g.MeasureString(scoreText, scoreFont);
             float scoreX = rowRect.Width - scoreSize.Width - 10;
-            g.DrawString(scoreText, scoreFont, scoreBrush, scoreX, 7);
+            g.DrawString(scoreText, scoreFont, scoreBrush, scoreX, y + 7);
             scoreFont.Dispose(); scoreBrush.Dispose();
 
-            // HP bar
-            int barX = (int)scoreX - 66;
-            int barY = 10;
+            // CD status (left of score)
+            string cdText;
+            if (ship == _state.LocalShip || _showEnemyCooldown)
+                cdText = ship.FireCooldownMs > 0 ? $"CD:{ship.FireCooldownMs / 1000.0:F1}s" : "就绪";
+            else
+                cdText = "--";
+            var cdFont = new Font("Consolas", 7.5f, FontStyle.Regular);
+            var cdBrush = new SolidBrush(Color.FromArgb(160, 160, 160));
+            var cdSize = g.MeasureString(cdText, cdFont);
+            float cdX = scoreX - cdSize.Width - 6;
+            g.DrawString(cdText, cdFont, cdBrush, cdX, y + 8);
+            cdFont.Dispose(); cdBrush.Dispose();
+
+            // HP bar (left of CD)
+            int barX = (int)cdX - 64;
+            int barY = y + 10;
             int barW = 60;
             int barH = 5;
             using (var barBg = new SolidBrush(Color.FromArgb(40, 42, 50)))
@@ -514,27 +528,16 @@ public partial class Main : Form
     private void RefreshScoreList()
     {
         if (_state == null || lstScore.IsDisposed) return;
-        var sorted = _state.AllShips
-            .OrderByDescending(s => s.Score)
-            .ToList();
-
-        lstScore.Items.Clear();
-        for (int i = 0; i < sorted.Count; i++)
+        int count = _state.AllShips.Count;
+        if (lstScore.Items.Count != count)
         {
-            var s = sorted[i];
-            string prefix = s == _state.LocalShip ? "► " : "   ";
-            string cdStatus;
-            if (s == _state.LocalShip || _showEnemyCooldown)
-            {
-                cdStatus = s.FireCooldownMs > 0
-                    ? $"CD:{s.FireCooldownMs / 1000.0:F1}s"
-                    : "就绪  ";
-            }
-            else
-            {
-                cdStatus = "--    ";
-            }
-            lstScore.Items.Add($"{prefix}#{i + 1,-3} {s.ShipName,-12} {s.Score,3}沉  HP:{s.HP}  {cdStatus}");
+            lstScore.Items.Clear();
+            for (int i = 0; i < count; i++)
+                lstScore.Items.Add(" ");
+        }
+        else
+        {
+            lstScore.Invalidate();
         }
     }
 
@@ -544,10 +547,17 @@ public partial class Main : Form
 
         ProcessMessages();
 
+        Console.WriteLine(this.lstScore.Items.Count);
+
         // Auto-battle AI
         if (cbAutoBattle.Checked && _state?.LocalShip != null)
         {
             SmartTick();
+        }
+        else if (_heldKeys.Count == 0)
+        {
+            _moveDx = 0;
+            _moveDy = 0;
         }
 
         if (_scoreDirty)

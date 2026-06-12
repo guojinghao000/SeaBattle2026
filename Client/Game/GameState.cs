@@ -130,6 +130,9 @@ public class GameState
             ship.PrevPy = ship.Py;
             if (int.TryParse(parts[i + 1], out int px)) ship.Px = px;
             if (int.TryParse(parts[i + 2], out int py)) ship.Py = py;
+            // 计算目标移动速度向量，用于开火时预测移动靶位置
+            ship.VelocityX = ship.Px - ship.PrevPx;
+            ship.VelocityY = ship.Py - ship.PrevPy;
             if (int.TryParse(parts[i + 3], out int fx)) ship.Fx = fx;
             if (int.TryParse(parts[i + 4], out int fy)) ship.Fy = fy;
             if (int.TryParse(parts[i + 5], out int hp)) ship.HP = hp;

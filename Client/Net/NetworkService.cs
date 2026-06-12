@@ -86,6 +86,14 @@ public class NetworkService : IDisposable
         }
     }
 
+    public async Task SendBroadcastAsync(string message = "Discovery")
+    {
+        if (_udpClient == null) return;
+        byte[] data = Encoding.UTF8.GetBytes(message);
+        await _udpClient.SendAsync(data, data.Length,
+            new IPEndPoint(IPAddress.Broadcast, _udpPort));
+    }
+
     private void ListenTcp(CancellationToken token)
     {
         if (_tcpReader == null) return;

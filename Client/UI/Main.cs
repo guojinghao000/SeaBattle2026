@@ -439,6 +439,20 @@ public partial class Main : Form
         }
     }
 
+    private async void BtnBroadcast_Click(object? sender, EventArgs e)
+    {
+        if (_net == null) return;
+        try
+        {
+            await _net.SendBroadcastAsync("Discovery");
+            lblStatus.Text = "已发送广播";
+        }
+        catch
+        {
+            lblStatus.Text = "广播发送失败";
+        }
+    }
+
     private async void BtnDisconnect_Click(object sender, EventArgs e)
     {
         await Disconnect();
@@ -824,6 +838,14 @@ public partial class Main : Form
         // Base: lower HP = much higher value
         double score = (4.0 - ship.HP) * 100;
 
+        // Bot bonus: 靶船不会移动，命中率100%，优先收割
+        if (ship.CaptainName == "AI")
+            score += 150;
+
+        // Finisher bonus: HP=1 → 一击必杀，极高优先
+        if (ship.HP == 1)
+            score += 100;
+
         // Distance penalty (closer = better, but don't over-penalize)
         score -= dist * 3;
 
@@ -968,7 +990,7 @@ public partial class Main : Form
         int dy = chase.Py - local.Py;
         int distSq = dx * dx + dy * dy;
 
-        // Already at good firing distance
+        // Already at good firing distance → stand your ground and fire
         if (distSq <= 100)
         {
             // If too close, back off
@@ -979,9 +1001,9 @@ public partial class Main : Form
             }
             else
             {
-                // Strafe: orbit around target while staying in range
-                _moveDx = distSq > 36 ? Math.Sign(dx) : -Math.Sign(dy);
-                _moveDy = distSq > 36 ? Math.Sign(dy) : Math.Sign(dx);
+                // Don't strafe — stay still to maximize fire accuracy
+                _moveDx = 0;
+                _moveDy = 0;
             }
             return;
         }
@@ -1294,17 +1316,21 @@ public partial class Main : Form
         int localPx = local.Px + _pendingDx;
         int localPy = local.Py + _pendingDy;
 
-        int dx = target.Px - localPx;
-        int dy = target.Py - localPy;
+        // 预测目标位置：根据上一次 Data 周期的移动速度，提前瞄准 ~500ms 后的位置
+        // VelocityX/Y 由 GameState.ProcessData 根据 Px-PrevPx 自动计算，范围 [-1,0,1]
+        int predictedPx = target.Px + target.VelocityX;
+        int predictedPy = target.Py + target.VelocityY;
+        // 钳制到地图边界内，避免预测到地图外
+        predictedPx = Math.Clamp(predictedPx, 0, 100);
+        predictedPy = Math.Clamp(predictedPy, 0, 100);
 
-        // Clamp to range [-10,10] within circle radius 10
+        int dx = predictedPx - localPx;
+        int dy = predictedPy - localPy;
+
+        // 预测位置超出射程10 → 不开火不消耗CD，让移动AI靠近后再打
+        // 避免截断到边界导致瞄准偏离目标1-2格 → MISS + 浪费2s CD
         if (dx * dx + dy * dy > 100)
-        {
-            double dist = Math.Sqrt(dx * dx + dy * dy);
-            double scale = 10.0 / dist;
-            dx = (int)(dx * scale);
-            dy = (int)(dy * scale);
-        }
+            return;
 
         _canFire = false;
         _fireTimer.Stop();

@@ -59,6 +59,7 @@
             // 
             gbLogin.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             gbLogin.Controls.Add(btnConnect);
+            gbLogin.Controls.Add(btnBroadcast);
             gbLogin.Controls.Add(txtCrew);
             gbLogin.Controls.Add(lblCrew);
             gbLogin.Controls.Add(txtCaptain);
@@ -86,6 +87,19 @@
             btnConnect.Text = "连接";
             btnConnect.UseVisualStyleBackColor = true;
             btnConnect.Click += BtnConnect_Click;
+            // 
+            // btnBroadcast
+            // 
+            btnBroadcast = new Button();
+            btnBroadcast.Location = new Point(200, 161);
+            btnBroadcast.Margin = new Padding(2, 3, 2, 3);
+            btnBroadcast.Name = "btnBroadcast";
+            btnBroadcast.Size = new Size(95, 26);
+            btnBroadcast.TabIndex = 9;
+            btnBroadcast.TabStop = false;
+            btnBroadcast.Text = "发送广播";
+            btnBroadcast.UseVisualStyleBackColor = true;
+            btnBroadcast.Click += BtnBroadcast_Click;
             // 
             // txtCrew
             // 
@@ -347,6 +361,7 @@
         private PictureBox pbMinimap;
         private GroupBox gbLogin;
         private Button btnConnect;
+        private Button btnBroadcast;
         private TextBox txtCrew;
         private Label lblCrew;
         private TextBox txtCaptain;

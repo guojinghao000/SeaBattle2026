@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(taskkill /f /im \"claude-code-daemon.exe\")",
+      "Bash(taskkill /f /im \"node.exe\" /fi \"WINDOWTITLE eq claude*\")",
+      "mcp__filesystem__directory_tree",
+      "Bash(dotnet build *)",
+      "Bash(pip list *)",
+      "Bash(pip install *)",
+      "Bash(python generate_docx.py)"
+    ]
+  }
+}

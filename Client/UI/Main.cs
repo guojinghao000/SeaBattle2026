@@ -437,6 +437,20 @@ public partial class Main : Form
         }
     }
 
+    private async void BtnBroadcast_Click(object? sender, EventArgs e)
+    {
+        if (_net == null) return;
+        try
+        {
+            await _net.SendBroadcastAsync("Discovery");
+            lblStatus.Text = "已发送广播";
+        }
+        catch
+        {
+            lblStatus.Text = "广播发送失败";
+        }
+    }
+
     private async void BtnDisconnect_Click(object sender, EventArgs e)
     {
         await Disconnect();

@@ -14,6 +14,8 @@ public partial class Main : Form
     private int _moveDx, _moveDy;
     private bool _canMove = true;
     private bool _canFire = true;
+    /// <summary>已发送但服务端尚未通过 Data 确认的移动偏移量，用于开火补偿</summary>
+    private int _pendingDx, _pendingDy;
     private bool _showEnemyCooldown = true;
     private bool _loggedIn;
     private bool _disconnecting;
@@ -547,7 +549,21 @@ public partial class Main : Form
     {
         if (_disconnecting) return;
 
+        // 记录处理前本船坐标，用于检测服务端是否已确认移动
+        int pxBefore = _state?.LocalShip?.Px ?? -1;
+        int pyBefore = _state?.LocalShip?.Py ?? -1;
+
         ProcessMessages();
+
+        // 如果服务端 Data 更新了本船坐标，说明之前的 Move 已被确认，清零未确认偏移
+        if (_state?.LocalShip != null)
+        {
+            if (_state.LocalShip.Px != pxBefore || _state.LocalShip.Py != pyBefore)
+            {
+                _pendingDx = 0;
+                _pendingDy = 0;
+            }
+        }
 
         Console.WriteLine(this.lstScore.Items.Count);
 
@@ -597,6 +613,9 @@ public partial class Main : Form
         if (_disconnecting || _net == null || !_canMove || (_moveDx == 0 && _moveDy == 0)) return;
 
         _canMove = false;
+        // 记录未确认的移动量，供 FireAt 补偿使用
+        _pendingDx += _moveDx;
+        _pendingDy += _moveDy;
         await _net.SendCommandAsync($"Move,{_moveDx},{_moveDy}");
 
         _ = Task.Run(async () =>
@@ -1268,8 +1287,15 @@ public partial class Main : Form
     {
         if (_disconnecting || _net == null || _state?.LocalShip == null) return;
 
-        int dx = target.Px - _state.LocalShip.Px;
-        int dy = target.Py - _state.LocalShip.Py;
+        var local = _state.LocalShip;
+
+        // 使用本船「预期服务端位置」= 上次 Data 确认的坐标 + 已发送未确认的移动量
+        // 这补偿了客户端与服务端之间的位置不同步问题
+        int localPx = local.Px + _pendingDx;
+        int localPy = local.Py + _pendingDy;
+
+        int dx = target.Px - localPx;
+        int dy = target.Py - localPy;
 
         // Clamp to range [-10,10] within circle radius 10
         if (dx * dx + dy * dy > 100)

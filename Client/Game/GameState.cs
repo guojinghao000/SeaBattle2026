@@ -125,6 +125,9 @@ public class GameState
                 _ships[id] = ship;
             }
 
+            // 保存上一帧坐标，用于开火偏移量计算补偿网络延迟
+            ship.PrevPx = ship.Px;
+            ship.PrevPy = ship.Py;
             if (int.TryParse(parts[i + 1], out int px)) ship.Px = px;
             if (int.TryParse(parts[i + 2], out int py)) ship.Py = py;
             if (int.TryParse(parts[i + 3], out int fx)) ship.Fx = fx;

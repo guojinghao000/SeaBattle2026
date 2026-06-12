@@ -185,28 +185,28 @@
             lblHint1.Name = "lblHint1";
             lblHint1.Size = new Size(302, 17);
             lblHint1.TabIndex = 0;
-            lblHint1.Text = "移动: W/A/S/D 或 方向键";
+            lblHint1.Text = "移动: W/A/S/D 或 方向键    空格: 回到自己";
             lblHint1.TextAlign = ContentAlignment.MiddleLeft;
-            // 
+            //
             // lblHint2
-            // 
+            //
             lblHint2.AutoSize = true;
             lblHint2.Location = new Point(5, 34);
             lblHint2.Margin = new Padding(2, 0, 2, 0);
             lblHint2.Name = "lblHint2";
             lblHint2.Size = new Size(211, 17);
             lblHint2.TabIndex = 1;
-            lblHint2.Text = "开火: Space / J    点击: 选中目标攻击";
-            // 
+            lblHint2.Text = "开火: J    鼠标点击: 选中目标攻击";
+            //
             // lblHint3
-            // 
+            //
             lblHint3.AutoSize = true;
             lblHint3.Location = new Point(5, 49);
             lblHint3.Margin = new Padding(2, 0, 2, 0);
             lblHint3.Name = "lblHint3";
             lblHint3.Size = new Size(248, 17);
             lblHint3.TabIndex = 2;
-            lblHint3.Text = "拖拽: 移动视角  滚轮: 缩放  F1: 自动战斗  Home: 跟随舰船";
+            lblHint3.Text = "拖拽: 移动视角  滚轮: 缩放  F1: 自动战斗";
             // 
             // gbScore
             // 
@@ -252,7 +252,7 @@
             lblShipStatus.Location = new Point(485, 476);
             lblShipStatus.Margin = new Padding(2, 0, 2, 0);
             lblShipStatus.Name = "lblShipStatus";
-            lblShipStatus.Size = new Size(311, 32);
+            lblShipStatus.Size = new Size(311, 44);
             lblShipStatus.TabIndex = 5;
             lblShipStatus.TextAlign = ContentAlignment.MiddleLeft;
             //
@@ -312,7 +312,7 @@
             // 
             AutoScaleDimensions = new SizeF(7F, 17F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(824, 548);
+            ClientSize = new Size(824, 560);
             Controls.Add(pbMinimap);
             Controls.Add(lblShipStatus);
             Controls.Add(btnDisconnect);

@@ -331,10 +331,12 @@ public partial class Main : Form
             g.DrawPath(cardPen, cardPath);
 
             var local = _state.LocalShip;
-            var font = new Font("Microsoft YaHei", 9f, FontStyle.Regular);
+            using var font = new Font("Microsoft YaHei", 9f, FontStyle.Regular);
+            using var fontSmall = new Font("Microsoft YaHei", 8f, FontStyle.Regular);
+            var textBrush = new SolidBrush(fgText);
 
-            // HP bar
-            int barX = 10, barY = 8, barW = 80, barH = 7;
+            // Row 1: HP bar + compact stats
+            int barX = 8, barY = 5, barW = 65, barH = 6;
             using (var barBg = new SolidBrush(Color.FromArgb(30, 32, 40)))
                 g.FillRectangle(barBg, barX, barY, barW, barH);
             float hpRatio = Math.Clamp(local.HP / 3f, 0, 1);
@@ -342,13 +344,13 @@ public partial class Main : Form
             using var hpBrush = new SolidBrush(hpColor);
             g.FillRectangle(hpBrush, barX, barY, barW * hpRatio, barH);
 
-            // Info text
-            string cdText = _canFire ? "⚡就绪" : $"⏳{local.FireCooldownMs / 1000.0:F1}s";
-            string aiText = cbAutoBattle.Checked ? $"  🤖{_aiMode}" : "";
-            string info = $"📍({local.Px},{local.Py})  ❤️{local.HP}/3  💀{local.Score}{aiText}  {cdText}";
-            g.DrawString(info, font, new SolidBrush(fgText), barX + barW + 8, 5);
+            string row1 = $"📍({local.Px},{local.Py})  ❤️{local.HP}/3  💀{local.Score}";
+            g.DrawString(row1, font, textBrush, barX + barW + 6, 2);
 
-            font.Dispose();
+            // Row 2: AI mode + cooldown
+            string cdText = _canFire ? "⚡就绪" : $"⏳{local.FireCooldownMs / 1000.0:F1}s";
+            string aiText = cbAutoBattle.Checked ? $"[AI] {_aiMode}" : "[手] 手动";
+            g.DrawString($"{aiText}    {cdText}", fontSmall, textBrush, barX, 24);
         };
     }
 
@@ -586,15 +588,8 @@ public partial class Main : Form
 
     private void UpdateShipStatus()
     {
-        if (_state?.LocalShip == null)
-        {
-            lblShipStatus.Text = "";
-            return;
-        }
-        var s = _state.LocalShip;
-        string cdText = _canFire ? "可开火" : $"冷却中({s.FireCooldownMs / 1000.0:F1}s)";
-        string aiText = cbAutoBattle.Checked ? $" [AI:{_aiMode}]" : "";
-        lblShipStatus.Text = $"位置:({s.Px},{s.Py})  HP:{s.HP}/3  击沉:{s.Score}  {cdText}{aiText}";
+        // 状态信息由 Paint 事件的自定义绘制完成，这里只需触发重绘
+        lblShipStatus.Invalidate();
     }
 
     private async void MoveTick(object? sender, EventArgs e)
@@ -614,6 +609,17 @@ public partial class Main : Form
     private void FireTick(object? sender, EventArgs e)
     {
         _canFire = true;
+
+        // 自动战斗：冷却一到立即开火，不等 GameTick 轮询
+        if (cbAutoBattle.Checked && _state?.LocalShip != null && !_disconnecting && _net != null)
+        {
+            var target = GetBestTargetInRange();
+            if (target != null)
+            {
+                _lastTargetId = target.ShipID;
+                _ = FireAt(target);
+            }
+        }
     }
 
     protected override bool ProcessDialogKey(Keys keyData)
@@ -629,18 +635,23 @@ public partial class Main : Form
 
     private void Main_KeyDown(object sender, KeyEventArgs e)
     {
+        // 登录前焦点在文本框时不拦截，让用户正常输入
+        if (!_loggedIn && this.ActiveControl is TextBox)
+            return;
+
         _heldKeys.Add(e.KeyCode);
         UpdateMoveDirection();
 
-        if (e.KeyCode == Keys.Space || e.KeyCode == Keys.J)
-        {
-            ManualFire();
-        }
-
-        if (e.KeyCode == Keys.Home)
+        // 空格/Home: 回到自己视角（类似 LoL 空格键）
+        if (e.KeyCode is Keys.Space or Keys.Home)
         {
             _followPlayer = true;
-            _zoomLevel = 1.0f;
+        }
+
+        // J: 手动开火
+        if (e.KeyCode == Keys.J)
+        {
+            ManualFire();
         }
 
         if (e.KeyCode == Keys.F1)
@@ -672,6 +683,10 @@ public partial class Main : Form
         else if (_heldKeys.Contains(Keys.S) || _heldKeys.Contains(Keys.Down)) _moveDy = 1;
         if (_heldKeys.Contains(Keys.A) || _heldKeys.Contains(Keys.Left)) _moveDx = -1;
         else if (_heldKeys.Contains(Keys.D) || _heldKeys.Contains(Keys.Right)) _moveDx = 1;
+
+        // 按移动键时自动恢复视角跟随（类似 LoL：移动英雄后视角跟随回来）
+        if (_moveDx != 0 || _moveDy != 0)
+            _followPlayer = true;
     }
 
     private Fleet? GetNearestTargetInRange()
@@ -701,6 +716,82 @@ public partial class Main : Form
     }
 
     /// <summary>
+    /// Squared Euclidean distance between two fleets.
+    /// </summary>
+    private static int GetDistSq(Fleet a, Fleet b)
+    {
+        int dx = a.Px - b.Px;
+        int dy = a.Py - b.Py;
+        return dx * dx + dy * dy;
+    }
+
+    /// <summary>
+    /// Count enemies within a given radius of a grid point.
+    /// </summary>
+    private int CountNearbyEnemies(int px, int py, int radius)
+    {
+        if (_state?.LocalShip == null) return 0;
+        var local = _state.LocalShip;
+        int rSq = radius * radius;
+        int count = 0;
+        foreach (var ship in _state.AllShips)
+        {
+            if (ship == local) continue;
+            int dx = ship.Px - px;
+            int dy = ship.Py - py;
+            if (dx * dx + dy * dy <= rSq) count++;
+        }
+        return count;
+    }
+
+    /// <summary>
+    /// Check if local ship is surrounded: enemies on opposing sides within range 12.
+    /// </summary>
+    private bool IsSurrounded()
+    {
+        if (_state?.LocalShip == null) return false;
+        var local = _state.LocalShip;
+        var ships = _state.AllShips;
+
+        bool left = false, right = false, up = false, down = false;
+        int checkSq = 12 * 12;
+        foreach (var ship in ships)
+        {
+            if (ship == local) continue;
+            int dx = ship.Px - local.Px;
+            int dy = ship.Py - local.Py;
+            if (dx * dx + dy * dy > checkSq) continue;
+            if (dx < -2) left = true;
+            if (dx > 2) right = true;
+            if (dy < -2) up = true;
+            if (dy > 2) down = true;
+        }
+        return (left && right) || (up && down);
+    }
+
+    /// <summary>
+    /// Direction away from the center-of-mass of nearby enemies.
+    /// </summary>
+    private (int dx, int dy) GetEscapeDirection()
+    {
+        if (_state?.LocalShip == null) return (0, 0);
+        var local = _state.LocalShip;
+        float sumDx = 0, sumDy = 0;
+        int n = 0, rangeSq = 15 * 15;
+
+        foreach (var ship in _state.AllShips)
+        {
+            if (ship == local) continue;
+            int dx = ship.Px - local.Px;
+            int dy = ship.Py - local.Py;
+            if (dx * dx + dy * dy <= rangeSq)
+            { sumDx += dx; sumDy += dy; n++; }
+        }
+        if (n == 0) return (0, 0);
+        return (-Math.Sign((int)sumDx), -Math.Sign((int)sumDy));
+    }
+
+    /// <summary>
     /// Score a target: higher = better to attack. Weighted by HP (low=good),
     /// distance (close=good), and persistence bonus for last target.
     /// </summary>
@@ -721,10 +812,13 @@ public partial class Main : Form
         if (ship.ShipID == _lastTargetId)
             score += 80;
 
-        // Prefer targets that are easier to reach (not blocked by edge)
-        // Slight bonus for targets nearer to map center (more traffic)
+        // Cluster bonus: prefer targets in dense areas (more kills nearby)
+        int nearby = CountNearbyEnemies(ship.Px, ship.Py, 8);
+        score += nearby * 40;
+
+        // Edge penalty: avoid targets hugging map edges
         double centerDist = Math.Sqrt((ship.Px - 50) * (ship.Px - 50) + (ship.Py - 50) * (ship.Py - 50));
-        score -= Math.Max(0, centerDist - 40) * 0.5; // penalty only for edge-huggers
+        score -= Math.Max(0, centerDist - 40) * 0.5;
 
         return score;
     }
@@ -791,14 +885,22 @@ public partial class Main : Form
         { _lastTargetId = null; _aiStuckCounter = 0; }
 
         // --- Decide mode ---
-        _aiMode = local.HP <= 1 ? AiMode.Survivor : AiMode.Aggressive;
-
         var fireTarget = GetBestTargetInRange();
         var chaseTarget = GetBestChaseTarget();
 
-        if (chaseTarget == null)
+        if (local.HP <= 1)
         {
+            // 残血：生存模式，保持距离作战
+            _aiMode = AiMode.Survivor;
+        }
+        else if (fireTarget == null && (chaseTarget == null || GetDistSq(local, chaseTarget) > 400))
+        {
+            // 射程内无目标且最近敌人距离 > 20，巡逻搜敌
             _aiMode = AiMode.Patrol;
+        }
+        else
+        {
+            _aiMode = AiMode.Aggressive;
         }
 
         // --- Act ---
@@ -815,7 +917,7 @@ public partial class Main : Form
                 break;
         }
 
-        // --- Fire at best target in range ---
+        // --- Fire at best target in range (fallback: FireTick handles primary auto-fire) ---
         if (fireTarget != null && _canFire && !_disconnecting && _net != null)
         {
             _lastTargetId = fireTarget.ShipID;
@@ -824,7 +926,8 @@ public partial class Main : Form
     }
 
     /// <summary>
-    /// Aggressive: close in to optimal range (5-8), chase best target.
+    /// Aggressive: close in, but avoid being surrounded.
+    /// When surrounded by enemies on opposing sides, break out first.
     /// </summary>
     private void AggressiveMove(Fleet? chase, Fleet? inRange)
     {
@@ -832,14 +935,24 @@ public partial class Main : Form
 
         if (chase == null) { PatrolMove(); return; }
 
+        // ── Anti-surround: escape if enemies on opposing sides ──
+        if (IsSurrounded())
+        {
+            var (escX, escY) = GetEscapeDirection();
+            _moveDx = escX;
+            _moveDy = escY;
+            ApplyEdgeBias();
+            return;
+        }
+
         int dx = chase.Px - local.Px;
         int dy = chase.Py - local.Py;
         int distSq = dx * dx + dy * dy;
 
-        // Already at good firing distance: slight strafe to avoid being too static
+        // Already at good firing distance
         if (distSq <= 100)
         {
-            // If target is very close (< 4), back off slightly
+            // If too close, back off
             if (distSq < 16)
             {
                 _moveDx = -Math.Sign(dx);
@@ -847,47 +960,47 @@ public partial class Main : Form
             }
             else
             {
-                // Strafe: orbit slightly around target while staying in range
+                // Strafe: orbit around target while staying in range
                 _moveDx = distSq > 36 ? Math.Sign(dx) : -Math.Sign(dy);
                 _moveDy = distSq > 36 ? Math.Sign(dy) : Math.Sign(dx);
             }
             return;
         }
 
-        // Move toward chase target
+        // Chase target
         _moveDx = Math.Sign(dx);
         _moveDy = Math.Sign(dy);
-
-        // Edge avoidance bias
         ApplyEdgeBias();
     }
 
     /// <summary>
-    /// Survivor mode: only attack HP=1 targets, avoid everyone else.
+    /// Survivor mode: attack any target in range, but keep safe distance.
+    /// Only flee when a threat is dangerously close (&lt; 4 units).
     /// </summary>
     private void SurvivorMove(Fleet? chase, Fleet? inRange)
     {
         var local = _state!.LocalShip!;
 
-        // If there's a killable HP=1 target in range, stay and fight
-        if (inRange != null && inRange.HP == 1)
+        // If target in range, stay put and fire — no need to close distance
+        if (inRange != null)
         {
-            _moveDx = 0;
-            _moveDy = 0;
+            // If enemy is dangerously close, back away slightly
+            int edx = inRange.Px - local.Px;
+            int edy = inRange.Py - local.Py;
+            if (edx * edx + edy * edy < 16)
+            {
+                _moveDx = -Math.Sign(edx);
+                _moveDy = -Math.Sign(edy);
+            }
+            else
+            {
+                _moveDx = 0;
+                _moveDy = 0;
+            }
             return;
         }
 
-        if (chase != null && chase.HP == 1)
-        {
-            // Chase HP=1 target
-            int dx = chase.Px - local.Px;
-            int dy = chase.Py - local.Py;
-            _moveDx = Math.Sign(dx);
-            _moveDy = Math.Sign(dy);
-            return;
-        }
-
-        // Flee from nearest threat: move away from nearest enemy
+        // Find nearest threat
         Fleet? threat = null;
         int minDistSq = int.MaxValue;
         foreach (var ship in _state.AllShips)
@@ -899,38 +1012,70 @@ public partial class Main : Form
             if (d2 < minDistSq) { minDistSq = d2; threat = ship; }
         }
 
-        if (threat != null)
+        // Flee from very close threats
+        if (threat != null && minDistSq < 16)
         {
             _moveDx = -Math.Sign(threat.Px - local.Px);
             _moveDy = -Math.Sign(threat.Py - local.Py);
+            ApplyEdgeBias();
+            return;
         }
 
-        ApplyEdgeBias();
+        // Cautiously approach a low-HP chase target
+        if (chase != null && chase.HP == 1)
+        {
+            _moveDx = Math.Sign(chase.Px - local.Px);
+            _moveDy = Math.Sign(chase.Py - local.Py);
+            ApplyEdgeBias();
+            return;
+        }
 
-        // Move toward center if no threats nearby
-        if (threat == null || minDistSq > 400) // 20+ units away
-            PatrolMove();
+        // Safe — patrol toward center
+        PatrolMove();
     }
 
     /// <summary>
-    /// Patrol: move toward map center (50,50) where action is.
+    /// Patrol: actively hunt the nearest enemy. Fall back to center only if none exist.
     /// </summary>
     private void PatrolMove()
     {
         var local = _state!.LocalShip!;
-        int dx = 50 - local.Px;
-        int dy = 50 - local.Py;
 
-        if (Math.Abs(dx) <= 3 && Math.Abs(dy) <= 3)
+        // Find nearest enemy at any distance
+        Fleet? nearest = null;
+        int minDistSq = int.MaxValue;
+        foreach (var ship in _state.AllShips)
         {
-            // Near center: circle slowly
+            if (ship == local) continue;
+            int dx = ship.Px - local.Px;
+            int dy = ship.Py - local.Py;
+            int d2 = dx * dx + dy * dy;
+            if (d2 < minDistSq) { minDistSq = d2; nearest = ship; }
+        }
+
+        if (nearest != null)
+        {
+            // Actively hunt nearest enemy
+            int dx = nearest.Px - local.Px;
+            int dy = nearest.Py - local.Py;
+            _moveDx = Math.Sign(dx);
+            _moveDy = Math.Sign(dy);
+            ApplyEdgeBias();
+            return;
+        }
+
+        // No enemies exist — wait at center
+        int cdx = 50 - local.Px;
+        int cdy = 50 - local.Py;
+        if (Math.Abs(cdx) <= 3 && Math.Abs(cdy) <= 3)
+        {
             _moveDx = (_aiStuckCounter / 3) % 2 == 0 ? 1 : -1;
             _moveDy = 0;
         }
         else
         {
-            _moveDx = Math.Sign(dx);
-            _moveDy = Math.Sign(dy);
+            _moveDx = Math.Sign(cdx);
+            _moveDy = Math.Sign(cdy);
         }
     }
 
@@ -1273,12 +1418,6 @@ public partial class Main : Form
             _viewportMinY = Math.Clamp(_viewportMinY, 0, 100 - _visibleGridsH);
         else
             _viewportMinY = (100 - _visibleGridsH) / 2f;
-
-        // Snap viewport to integer grid so ships and grid lines align exactly
-        _viewportMinX = (float)Math.Floor(_viewportMinX);
-        _viewportMinY = (float)Math.Floor(_viewportMinY);
-        _viewportCenterX = _viewportMinX + _visibleGridsW / 2f;
-        _viewportCenterY = _viewportMinY + _visibleGridsH / 2f;
 
         float viewportMaxX = _viewportMinX + _visibleGridsW;
         float viewportMaxY = _viewportMinY + _visibleGridsH;
